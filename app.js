@@ -20,11 +20,6 @@ let serverTimestamp;
 
 const classLevels = ["ป.4", "ป.5", "ป.6"];
 const todayISO = () => new Date().toISOString().slice(0, 10);
-const localAdminCredentials = {
-  username: "stamp45240",
-  email: "stampnattaki17@gmail.com",
-  password: "Punbnk48"
-};
 const schedulePeriods = [
   { period: 1, time: "09.00-10.00", label: "คาบที่ 1" },
   { period: 2, time: "10.00-11.00", label: "คาบที่ 2" },
@@ -78,11 +73,11 @@ const state = {
 
 const demoStudents = [
   { id: "s1", studentNo: 1, studentCode: "P401", prefix: "ด.ช.", firstName: "ภาคิน", lastName: "ใจดี", nickname: "คิน", gender: "ชาย", classLevel: "ป.4", birthDate: "2016-02-10", weight: 32, height: 138, parentPhone: "0800000001", address: "ในเขตบริการ", status: "กำลังศึกษา" },
-  { id: "s2", studentNo: 2, studentCode: "P402", prefix: "ด.ญ.", firstName: "ณิชา", lastName: "สดใส", nickname: "นิ", gender: "˭ԧ", classLevel: "ป.4", birthDate: "2016-08-21", weight: 29, height: 134, parentPhone: "0800000002", address: "ในเขตบริการ", status: "กำลังศึกษา" },
+  { id: "s2", studentNo: 2, studentCode: "P402", prefix: "ด.ญ.", firstName: "ณิชา", lastName: "สดใส", nickname: "นิ", gender: "????", classLevel: "ป.4", birthDate: "2016-08-21", weight: 29, height: 134, parentPhone: "0800000002", address: "ในเขตบริการ", status: "กำลังศึกษา" },
   { id: "s3", studentNo: 1, studentCode: "P501", prefix: "ด.ช.", firstName: "ธันวา", lastName: "ตั้งใจ", nickname: "วา", gender: "ชาย", classLevel: "ป.5", birthDate: "2015-05-04", weight: 37, height: 145, parentPhone: "0800000003", address: "ในเขตบริการ", status: "กำลังศึกษา" },
-  { id: "s4", studentNo: 2, studentCode: "P502", prefix: "ด.ญ.", firstName: "ปุณยา", lastName: "แบ่งปัน", nickname: "ปัน", gender: "˭ԧ", classLevel: "ป.5", birthDate: "2015-11-12", weight: 35, height: 143, parentPhone: "0800000004", address: "ในเขตบริการ", status: "กำลังศึกษา" },
+  { id: "s4", studentNo: 2, studentCode: "P502", prefix: "ด.ญ.", firstName: "ปุณยา", lastName: "แบ่งปัน", nickname: "ปัน", gender: "????", classLevel: "ป.5", birthDate: "2015-11-12", weight: 35, height: 143, parentPhone: "0800000004", address: "ในเขตบริการ", status: "กำลังศึกษา" },
   { id: "s5", studentNo: 1, studentCode: "P601", prefix: "ด.ช.", firstName: "กฤต", lastName: "ขยัน", nickname: "กฤต", gender: "ชาย", classLevel: "ป.6", birthDate: "2014-03-17", weight: 43, height: 151, parentPhone: "0800000005", address: "ในเขตบริการ", status: "กำลังศึกษา" },
-  { id: "s6", studentNo: 2, studentCode: "P602", prefix: "ด.ญ.", firstName: "มนัสวี", lastName: "เมตตา", nickname: "มีน", gender: "˭ԧ", classLevel: "ป.6", birthDate: "2014-09-30", weight: 41, height: 149, parentPhone: "0800000006", address: "ในเขตบริการ", status: "กำลังศึกษา" }
+  { id: "s6", studentNo: 2, studentCode: "P602", prefix: "ด.ญ.", firstName: "มนัสวี", lastName: "เมตตา", nickname: "มีน", gender: "????", classLevel: "ป.6", birthDate: "2014-09-30", weight: 41, height: 149, parentPhone: "0800000006", address: "ในเขตบริการ", status: "กำลังศึกษา" }
 ];
 
 const $ = (selector) => document.querySelector(selector);
@@ -177,26 +172,17 @@ async function loginAnonymous() {
 async function loginAdmin(event) {
   event.preventDefault();
   const username = $("#adminEmail").value.trim();
-  const passwordInput = $("#adminPassword").value.trim();
-  const password = isKnownAdminUsername(username) && !passwordInput
-    ? localAdminCredentials.password
-    : passwordInput;
+  const password = $("#adminPassword").value.trim();
   if (!username || !password) {
     showToast("กรุณากรอกชื่อผู้ใช้และรหัสผ่าน");
     return;
   }
-  if (isLocalAdminLogin(username, password)) {
-    state.role = "admin";
-    showApp();
-    showToast("เข้าสู่ระบบ Admin สำเร็จ ✅");
-    return;
-  }
   if (!state.firebaseReady) {
-    showToast("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
+    showToast("Firebase ยังไม่พร้อมใช้งาน Admin กรุณาตรวจการเชื่อมต่อ Firebase");
     return;
   }
   if (!username.includes("@")) {
-    showToast("ถ้าใช้ Firebase Admin กรุณากรอกอีเมล หรือใช้ stamp45240 / Punbnk48");
+    showToast("Admin ต้องเข้าสู่ระบบด้วยอีเมล Firebase เท่านั้น");
     return;
   }
   try {
@@ -205,32 +191,16 @@ async function loginAdmin(event) {
     state.role = "admin";
     showToast("เข้าสู่ระบบ Admin สำเร็จ ✅");
   } catch (error) {
-    if (isLocalAdminLogin(username, password)) {
-      state.role = "admin";
-      showApp();
-      showToast("เข้าสู่ระบบ Admin สำเร็จด้วยบัญชีสำรอง ✅");
-    } else if (error.code === "auth/configuration-not-found") {
+    if (error.code === "auth/configuration-not-found") {
       showToast("Firebase Auth ยังไม่ได้เปิดใช้งาน กรุณาเปิด Email/Password ใน Firebase Console");
     } else if (error.code === "auth/invalid-credential" || error.code === "auth/user-not-found") {
-      showToast("ยังไม่พบผู้ใช้ Email/Password นี้ใน Firebase Auth กรุณาเพิ่มผู้ใช้ใน Console หรือใช้ stamp45240 / Punbnk48");
+      showToast("อีเมลหรือรหัสผ่าน Admin ไม่ถูกต้อง กรุณาตรวจผู้ใช้ใน Firebase Auth");
     } else {
       handleError(error, "เข้าสู่ระบบ Admin ไม่สำเร็จ");
     }
   } finally {
     showLoading(false);
   }
-}
-
-function isLocalAdminLogin(username, password) {
-  const normalizedUsername = String(username || "").trim().toLowerCase();
-  const normalizedPassword = String(password || "").trim();
-  return isKnownAdminUsername(normalizedUsername)
-    && normalizedPassword === localAdminCredentials.password;
-}
-
-function isKnownAdminUsername(username) {
-  const normalizedUsername = String(username || "").trim().toLowerCase();
-  return [localAdminCredentials.username, localAdminCredentials.email].includes(normalizedUsername);
 }
 
 async function logout() {
@@ -858,7 +828,7 @@ function studentRecordCard(student, statuses) {
   return `
     <article class="student-card status-${firstStatus}" data-student-id="${student.id}" data-status="${firstStatus}">
       <div class="student-card-head">
-        <div class="student-avatar">${student.gender === "˭ԧ" ? "👧" : "👦"}</div>
+        <div class="student-avatar">${student.gender === "????" ? "👧" : "👦"}</div>
         <div>
           <p class="student-meta">เลขที่ ${String(student.studentNo).padStart(2, "0")} • ${student.classLevel}</p>
           <h4 class="student-name">${fullName(student)}</h4>
@@ -975,7 +945,7 @@ function renderHealthTable() {
           <article class="card health-card">
             <div class="bmi-gauge" style="--gauge:${gauge}%"><span>💜</span></div>
             <div>
-              <h3>${student.gender === "˭ԧ" ? "👧" : "👦"} ${fullName(student)}</h3>
+              <h3>${student.gender === "????" ? "👧" : "👦"} ${fullName(student)}</h3>
               <p>น้ำหนัก: ${student.weight || "-"} kg • ส่วนสูง: ${student.height || "-"} cm</p>
               <p>BMI: ${bmi || "-"} • <strong class="${bmiClass(category)}">${category}</strong></p>
               <p>อายุ: ${student.birthDate ? calculateAge(student.birthDate) : "-"}</p>
@@ -1608,7 +1578,7 @@ function renderStudents() {
         <label>ชื่อ<input id="firstName"></label>
         <label>นามสกุล<input id="lastName"></label>
         <label>ชื่อเล่น<input id="nickname"></label>
-        <label>เพศ<select id="gender"><option>ชาย</option><option>˭ԧ</option><option>อื่น ๆ</option></select></label>
+        <label>เพศ<select id="gender"><option>ชาย</option><option>????</option><option>อื่น ๆ</option></select></label>
         <label>ชั้นเรียน<select id="studentClass">${classLevels.map((level) => `<option>${level}</option>`).join("")}</select></label>
         <label>วันเกิด<input id="birthDate" type="date"></label>
         <label>น้ำหนัก<input id="weight" type="number" step="0.1"></label>
@@ -1804,7 +1774,7 @@ function studentFromCsvRow(headers, row) {
     firstName: nameParts.firstName,
     lastName: nameParts.lastName,
     nickname: csvValue(headers, row, ["ชื่อเล่น", "nickname"]),
-    gender: nameParts.prefix.includes("ญ") || nameParts.prefix.includes("˭ԧ") ? "˭ԧ" : "ชาย",
+    gender: nameParts.prefix.includes("ญ") || nameParts.prefix.includes("????") ? "????" : "ชาย",
     classLevel: csvValue(headers, row, ["ชั้น", "ชั้นเรียน", "class", "classlevel"]) || selectedClass(),
     birthDate: csvValue(headers, row, ["วันเกิด", "birthdate", "birthday"]),
     weight: 0,
