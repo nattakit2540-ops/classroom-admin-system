@@ -18,6 +18,8 @@ let query;
 let where;
 let serverTimestamp;
 
+const adminEmails = ["stampnattaki17@gmail.com"];
+
 const classLevels = ["ป.4", "ป.5", "ป.6"];
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const schedulePeriods = [
@@ -123,9 +125,11 @@ async function initFirebase() {
     onAuthStateChanged(state.auth, async (user) => {
       state.user = user;
       if (user) {
+        state.role = isConfiguredAdminEmail(user.email) ? "admin" : "teacher";
         await loadAllData();
         showApp();
       } else {
+        state.role = "teacher";
         showLogin();
       }
     });
@@ -187,7 +191,12 @@ async function loginAdmin(event) {
   }
   try {
     showLoading(true);
-    await signInWithEmailAndPassword(state.auth, username, password);
+    const credential = await signInWithEmailAndPassword(state.auth, username, password);
+    if (!isConfiguredAdminEmail(credential.user.email)) {
+      await signOut(state.auth);
+      showToast("บัญชีนี้ยังไม่ได้รับสิทธิ์ Admin");
+      return;
+    }
     state.role = "admin";
     showToast("เข้าสู่ระบบ Admin สำเร็จ ✅");
   } catch (error) {
@@ -201,6 +210,10 @@ async function loginAdmin(event) {
   } finally {
     showLoading(false);
   }
+}
+
+function isConfiguredAdminEmail(email) {
+  return adminEmails.includes(String(email || "").trim().toLowerCase());
 }
 
 async function logout() {
@@ -1637,6 +1650,10 @@ function renderStudentTable() {
 }
 
 async function addStudent() {
+  if (!canManageStudents()) {
+    showToast("ต้องเข้าสู่ระบบ Admin ก่อนเพิ่มข้อมูลนักเรียน");
+    return;
+  }
   const payload = {
     studentNo: Number($("#studentNo").value),
     studentCode: $("#studentCode").value,
@@ -1681,6 +1698,12 @@ async function importStudentsFromCSV(event) {
   const file = event.target.files?.[0];
   if (!file) return;
 
+  if (!canManageStudents()) {
+    showToast("ต้องเข้าสู่ระบบ Admin ก่อนนำเข้านักเรียนจาก CSV");
+    event.target.value = "";
+    return;
+  }
+
   try {
     const text = await file.text();
     const rows = parseDelimitedRows(text);
@@ -1714,7 +1737,11 @@ async function importStudentsFromCSV(event) {
     playSuccessSound();
     renderStudents();
   } catch (error) {
-    handleError(error, "นำเข้า CSV ไม่สำเร็จ");
+    if (error.code === "permission-denied") {
+      showToast("นำเข้า CSV ไม่สำเร็จ: บัญชี Admin ยังไม่มีสิทธิ์เขียนข้อมูลนักเรียน");
+    } else {
+      handleError(error, "นำเข้า CSV ไม่สำเร็จ");
+    }
   } finally {
     showLoading(false);
     event.target.value = "";
@@ -1774,9 +1801,9 @@ function studentFromCsvRow(headers, row) {
     firstName: nameParts.firstName,
     lastName: nameParts.lastName,
     nickname: csvValue(headers, row, ["ชื่อเล่น", "nickname"]),
-    gender: nameParts.prefix.includes("ญ") || nameParts.prefix.includes("????") ? "????" : "ชาย",
+    gender: nameParts.prefix.includes("ญ") || nameParts.prefix.includes("หญิง") ? "หญิง" : "ชาย",
     classLevel: csvValue(headers, row, ["ชั้น", "ชั้นเรียน", "class", "classlevel"]) || selectedClass(),
-    birthDate: csvValue(headers, row, ["วันเกิด", "birthdate", "birthday"]),
+    birthDate: normalizeBirthDate(csvValue(headers, row, ["วันเกิด", "birthdate", "birthday"])),
     weight: 0,
     height: 0,
     parentPhone: csvValue(headers, row, ["ผู้ปกครอง", "เบอร์ผู้ปกครอง", "parentphone", "phone"]),
@@ -1785,6 +1812,30 @@ function studentFromCsvRow(headers, row) {
     createdAt: nowValue(),
     updatedAt: nowValue()
   };
+}
+
+function canManageStudents() {
+  return state.role === "admin";
+}
+
+function normalizeBirthDate(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+
+  const match = text.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+  if (!match) return text;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  let year = Number(match[3]);
+  if (year > 2400) year -= 543;
+
+  return [
+    String(year).padStart(4, "0"),
+    String(month).padStart(2, "0"),
+    String(day).padStart(2, "0")
+  ].join("-");
 }
 
 function splitThaiFullName(fullNameText) {
@@ -1809,6 +1860,10 @@ function downloadTextFile(filename, content, type) {
 }
 
 async function updateStudent(id) {
+  if (!canManageStudents()) {
+    showToast("ต้องเข้าสู่ระบบ Admin ก่อนแก้ไขข้อมูลนักเรียน");
+    return;
+  }
   const student = state.students.find((item) => item.id === id);
   if (!student) return;
   const newPhone = prompt("แก้ไขเบอร์ผู้ปกครอง", student.parentPhone || "");

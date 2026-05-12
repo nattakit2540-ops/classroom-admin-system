@@ -12,6 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: echo "No build needed"
+      - name: Deploy Firestore rules
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRO_3_E6F35 }}
+        run: |
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$HOME/firebase-service-account.json"
+          GOOGLE_APPLICATION_CREDENTIALS="$HOME/firebase-service-account.json" npx -y firebase-tools@latest deploy --only firestore:rules --project pro-3-e6f35
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
