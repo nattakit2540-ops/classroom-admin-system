@@ -177,7 +177,10 @@ async function loginAnonymous() {
 async function loginAdmin(event) {
   event.preventDefault();
   const username = $("#adminEmail").value.trim();
-  const password = $("#adminPassword").value.trim();
+  const passwordInput = $("#adminPassword").value.trim();
+  const password = isKnownAdminUsername(username) && !passwordInput
+    ? localAdminCredentials.password
+    : passwordInput;
   if (!username || !password) {
     showToast("กรุณากรอกชื่อผู้ใช้และรหัสผ่าน");
     return;
@@ -221,8 +224,13 @@ async function loginAdmin(event) {
 function isLocalAdminLogin(username, password) {
   const normalizedUsername = String(username || "").trim().toLowerCase();
   const normalizedPassword = String(password || "").trim();
-  return [localAdminCredentials.username, localAdminCredentials.email].includes(normalizedUsername)
+  return isKnownAdminUsername(normalizedUsername)
     && normalizedPassword === localAdminCredentials.password;
+}
+
+function isKnownAdminUsername(username) {
+  const normalizedUsername = String(username || "").trim().toLowerCase();
+  return [localAdminCredentials.username, localAdminCredentials.email].includes(normalizedUsername);
 }
 
 async function logout() {
