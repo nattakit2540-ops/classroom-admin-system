@@ -1,0 +1,84 @@
+# Skill: Sakura Sensei Classroom
+
+## Purpose
+
+ใช้ skill นี้เมื่อต้องพัฒนา ปรับปรุง หรือดูแลเว็บแอป “ระบบธุรการชั้นเรียน” ให้คงแนว Modern Japan Classroom UI
+
+## Visual Direction
+
+Theme name: `Sakura Sensei Classroom`
+
+Style mix:
+
+- Japanese Minimal
+- Kawaii School
+- Modern Dashboard
+- Clean classroom administration
+
+Mood:
+
+- สะอาด
+- สีสันสดใส
+- น่ารักแบบพอดี
+- ใช้งานจริงสำหรับครู
+- ไม่รกและไม่เป็น landing page
+
+## Color Tokens
+
+```css
+:root {
+  --primary: #7c3aed;
+  --secondary: #4f46e5;
+  --accent: #ec4899;
+  --sky: #38bdf8;
+  --mint: #34d399;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --bg: #f8f5ff;
+  --card: rgba(255, 255, 255, 0.82);
+  --text: #312e81;
+}
+```
+
+## UX Requirements
+
+- ครูต้องเลือกชั้นแล้วบันทึกข้อมูลได้เร็ว
+- เช็กชื่อและบันทึกประจำวันควรเป็น card grid
+- สถานะควรใช้สีและ emoji ชัดเจน
+- Dashboard ต้องมี hero แบบญี่ปุ่นพร้อมวันที่ไทย
+- ใช้ progress bar ในภารกิจดื่มนมและแปรงฟัน
+- Dark mode ต้องมี glow ม่วง / ชมพู และพื้นหลังน้ำเงินเข้ม
+- Animation ต้องนุ่ม ไม่รบกวนการทำงาน
+
+## Components
+
+- `sensei-hero`: หัว Dashboard พร้อมข้อความ `おはよう Sensei 🌸`
+- `student-card`: การ์ดนักเรียนสำหรับเช็กชื่อ
+- `mission-progress`: progress bar สำหรับดื่มนมและแปรงฟัน
+- `health-card`: การ์ดสุขภาพพร้อม BMI gauge
+- `subject-pill`: badge รายวิชาในตารางเรียน
+- `sakura`: กลีบซากุระลอยเบา ๆ
+
+## Schedule Rule
+
+ตารางเรียนมี 7 คาบ:
+
+- คาบที่ 1: 09.00-10.00
+- คาบที่ 2: 10.00-11.00
+- คาบที่ 3: 11.00-12.00
+- คาบที่ 4: 12.00-13.00 พักรับประทานอาหารกลางวัน
+- คาบที่ 5: 13.00-14.00
+- คาบที่ 6: 14.00-15.00
+- คาบที่ 7: 15.00-16.00
+
+ไม่ต้องมีเมนูโฮมรูม เพราะใช้เช็กชื่อรายวันแทน
+
+## Copy Tone
+
+ใช้ภาษาไทยที่เป็นมิตรกับครู เช่น:
+
+- `บันทึกเรียบร้อยแล้ว Sensei! 🌸✅`
+- `Sensei กำลังเตรียมข้อมูลให้นะ 🌸`
+- `ภารกิจดื่มนมวันนี้ 🥛✨`
+- `Smile Check 🪥😁`
+- `วันนี้พร้อมดูแลเด็ก ๆ แล้วหรือยัง?`

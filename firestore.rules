@@ -1,0 +1,83 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/userRoles/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/userRoles/$(request.auth.uid)).data.role
+        : "teacher";
+    }
+
+    function isAdmin() {
+      return signedIn() && role() == "admin";
+    }
+
+    function isTeacher() {
+      return signedIn() && role() in ["teacher", "admin"];
+    }
+
+    function dailyCollections() {
+      return resource == null || request.resource != null;
+    }
+
+    match /userRoles/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /students/{docId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /settings/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /schedules/{docId} {
+      allow read: if signedIn();
+      allow create, update: if isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /attendance/{docId} {
+      allow read: if signedIn();
+      allow create, update: if isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /milkRecords/{docId} {
+      allow read: if signedIn();
+      allow create, update: if isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /toothbrushRecords/{docId} {
+      allow read: if signedIn();
+      allow create, update: if isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /healthRecords/{docId} {
+      allow read: if signedIn();
+      allow create, update: if isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /behaviorRecords/{docId} {
+      allow read: if signedIn();
+      allow create, update: if isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
