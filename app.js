@@ -20,6 +20,11 @@ let serverTimestamp;
 
 const classLevels = ["ป.4", "ป.5", "ป.6"];
 const todayISO = () => new Date().toISOString().slice(0, 10);
+const localAdminCredentials = {
+  username: "stamp45240",
+  email: "stampnattaki17@gmail.com",
+  password: "Punbnk48"
+};
 const schedulePeriods = [
   { period: 1, time: "09.00-10.00", label: "คาบที่ 1" },
   { period: 2, time: "10.00-11.00", label: "คาบที่ 2" },
@@ -163,45 +168,61 @@ async function loadFirebaseModules() {
 }
 
 async function loginAnonymous() {
-  if (!state.firebaseReady) {
+  state.role = "teacher";
+  state.user = { uid: "local-teacher", isAnonymous: true };
+  showApp();
+  showToast("เข้าสู่ระบบครูทั่วไปแล้ว ✅");
+}
+
+async function loginAdmin(event) {
+  event.preventDefault();
+  const username = $("#adminEmail").value.trim();
+  const password = $("#adminPassword").value.trim();
+  if (!username || !password) {
+    showToast("กรุณากรอกชื่อผู้ใช้และรหัสผ่าน");
+    return;
+  }
+  if (isLocalAdminLogin(username, password)) {
+    state.role = "admin";
     showApp();
+    showToast("เข้าสู่ระบบ Admin สำเร็จ ✅");
+    return;
+  }
+  if (!state.firebaseReady) {
+    showToast("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
+    return;
+  }
+  if (!username.includes("@")) {
+    showToast("ถ้าใช้ Firebase Admin กรุณากรอกอีเมล หรือใช้ stamp45240 / Punbnk48");
     return;
   }
   try {
     showLoading(true);
-    await signInAnonymously(state.auth);
-    showToast("เข้าสู่ระบบครูทั่วไปแล้ว ✅");
+    await signInWithEmailAndPassword(state.auth, username, password);
+    state.role = "admin";
+    showToast("เข้าสู่ระบบ Admin สำเร็จ ✅");
   } catch (error) {
-    handleError(error, "เข้าสู่ระบบไม่สำเร็จ");
+    if (isLocalAdminLogin(username, password)) {
+      state.role = "admin";
+      showApp();
+      showToast("เข้าสู่ระบบ Admin สำเร็จด้วยบัญชีสำรอง ✅");
+    } else if (error.code === "auth/configuration-not-found") {
+      showToast("Firebase Auth ยังไม่ได้เปิดใช้งาน กรุณาเปิด Email/Password ใน Firebase Console");
+    } else if (error.code === "auth/invalid-credential" || error.code === "auth/user-not-found") {
+      showToast("ยังไม่พบผู้ใช้ Email/Password นี้ใน Firebase Auth กรุณาเพิ่มผู้ใช้ใน Console หรือใช้ stamp45240 / Punbnk48");
+    } else {
+      handleError(error, "เข้าสู่ระบบ Admin ไม่สำเร็จ");
+    }
   } finally {
     showLoading(false);
   }
 }
 
-async function loginAdmin(event) {
-  event.preventDefault();
-  const email = $("#adminEmail").value.trim();
-  const password = $("#adminPassword").value.trim();
-  if (!email || !password) {
-    showToast("กรุณากรอกอีเมลและรหัสผ่าน");
-    return;
-  }
-  if (!state.firebaseReady) {
-    state.role = "admin";
-    showApp();
-    showToast("เข้าสู่ระบบ Admin โหมดทดลอง ✅");
-    return;
-  }
-  try {
-    showLoading(true);
-    await signInWithEmailAndPassword(state.auth, email, password);
-    state.role = "admin";
-    showToast("เข้าสู่ระบบ Admin สำเร็จ ✅");
-  } catch (error) {
-    handleError(error, "เข้าสู่ระบบ Admin ไม่สำเร็จ");
-  } finally {
-    showLoading(false);
-  }
+function isLocalAdminLogin(username, password) {
+  const normalizedUsername = String(username || "").trim().toLowerCase();
+  const normalizedPassword = String(password || "").trim();
+  return [localAdminCredentials.username, localAdminCredentials.email].includes(normalizedUsername)
+    && normalizedPassword === localAdminCredentials.password;
 }
 
 async function logout() {
@@ -1171,8 +1192,9 @@ async function saveSchedule() {
 function renderReports(kind = "all") {
   const reportTypes = [
     "รายงานการมาเรียนรายวัน", "รายงานการมาเรียนรายเดือน",
-    "รายงานเช็กชื่อเข้าเรียน", "รายงานดื่มนม", "รายงานแปรงฟัน", "รายงาน BMI",
-    "รายงานอายุ", "รายงานพฤติกรรม", "รายงานภาพรวมรายห้อง"
+    "รายงานเช็กชื่อเข้าเรียน", "รายงานดื่มนม", "รายงานดื่มนมรายเดือน",
+    "รายงานแปรงฟัน", "รายงานแปรงฟันรายเดือน", "รายงาน BMI",
+    "รายงานสุขภาพรายเดือน", "รายงานอายุ", "รายงานพฤติกรรม", "รายงานภาพรวมรายห้อง"
   ];
   $("#mainContent").innerHTML = `
     ${sectionHeader("ระบบรายงาน", "กรองข้อมูล พิมพ์รายงาน และ Export CSV")}
@@ -1256,11 +1278,20 @@ function buildCurrentReport() {
   if (type.includes("เข้าเรียน")) {
     return attendanceReport("รายงานเช็กชื่อเข้าเรียน", date, classLevel, students, (item) => item.type === "subject" && item.date === date, false, true);
   }
+  if (type.includes("ดื่มนมรายเดือน")) {
+    return monthlyDailyRecordSummaryReport("รายงานดื่มนมรายเดือน", date.slice(0, 7), classLevel, students, state.milkRecords, ["ดื่ม", "ไม่ดื่ม", "ลา", "ขาด"]);
+  }
   if (type.includes("ดื่มนม")) {
     return dailyRecordReport("รายงานดื่มนม", date, classLevel, students, state.milkRecords, "ดื่ม");
   }
+  if (type.includes("แปรงฟันรายเดือน")) {
+    return monthlyDailyRecordSummaryReport("รายงานแปรงฟันรายเดือน", date.slice(0, 7), classLevel, students, state.toothbrushRecords, ["แปรงฟัน", "ไม่แปรง", "ลืมอุปกรณ์", "ลา", "ขาด"]);
+  }
   if (type.includes("แปรงฟัน")) {
     return dailyRecordReport("รายงานแปรงฟัน", date, classLevel, students, state.toothbrushRecords, "แปรงฟัน");
+  }
+  if (type.includes("สุขภาพรายเดือน")) {
+    return monthlyHealthSummaryReport("รายงานสุขภาพรายเดือน", date.slice(0, 7), classLevel, students);
   }
   if (type.includes("BMI")) {
     return bmiReport(title, students);
@@ -1391,6 +1422,103 @@ function dailyRecordReport(title, date, classLevel, students, collectionItems, s
     headers: ["เลขที่", "ชื่อ-สกุล", "ชั้น", "สถานะ", "หมายเหตุ"],
     rows
   };
+}
+
+function monthlyDailyRecordSummaryReport(title, month, classLevel, students, collectionItems, statuses) {
+  const monthlyRecords = filterByClass(collectionItems, classLevel)
+    .filter((item) => String(item.date || "").startsWith(month));
+  const rows = students.map((student) => {
+    const counts = Object.fromEntries(statuses.map((status) => [status, 0]));
+    monthlyRecords.forEach((item) => {
+      const record = (item.records || []).find((entry) => entry.studentId === student.id);
+      const status = record?.status || "รอข้อมูล";
+      if (counts[status] !== undefined) counts[status] += 1;
+    });
+    const total = statuses.reduce((sum, status) => sum + counts[status], 0);
+    const successStatus = statuses[0];
+    return [
+      student.studentNo,
+      fullName(student),
+      student.classLevel,
+      ...statuses.map((status) => counts[status]),
+      total,
+      total ? `${Math.round((counts[successStatus] / total) * 100)}%` : "0%"
+    ];
+  });
+  const summary = statuses.reduce((sum, status) => ({ ...sum, [status]: 0 }), {});
+  let summaryTotal = 0;
+  rows.forEach((row) => {
+    statuses.forEach((status, index) => {
+      summary[status] += Number(row[index + 3] || 0);
+    });
+    summaryTotal += Number(row[statuses.length + 3] || 0);
+  });
+  rows.push([
+    "",
+    "รวมทั้งเดือน",
+    classLevel,
+    ...statuses.map((status) => summary[status]),
+    summaryTotal,
+    summaryTotal ? `${Math.round((summary[statuses[0]] / summaryTotal) * 100)}%` : "0%"
+  ]);
+  return {
+    title: `${title} ${month}`,
+    headers: ["เลขที่", "ชื่อ-สกุล", "ชั้น", ...statuses, "รวมบันทึก", "ร้อยละสำเร็จ"],
+    rows
+  };
+}
+
+function monthlyHealthSummaryReport(title, month, classLevel, students) {
+  const monthlyRecords = filterByClass(state.healthRecords, classLevel)
+    .filter((item) => String(item.recordDate || "").startsWith(month));
+  const rows = students.map((student) => {
+    const records = monthlyRecords
+      .filter((item) => item.studentId === student.id)
+      .sort((a, b) => String(a.recordDate || "").localeCompare(String(b.recordDate || "")));
+    const latest = records.at(-1);
+    const averageWeight = average(records.map((item) => Number(item.weight || 0)).filter(Boolean));
+    const averageHeight = average(records.map((item) => Number(item.height || 0)).filter(Boolean));
+    const latestBmi = latest?.bmi || calculateBMI(latest?.weight, latest?.height);
+    return [
+      student.studentNo,
+      fullName(student),
+      student.classLevel,
+      records.length,
+      latest?.recordDate || "-",
+      averageWeight || "-",
+      averageHeight || "-",
+      latestBmi || "-",
+      latestBmi ? getBMICategory(latestBmi) : "รอข้อมูล",
+      student.birthDate ? calculateAge(student.birthDate) : "-"
+    ];
+  });
+  const summary = rows.reduce((sum, row) => {
+    const category = row[8];
+    if (sum[category] !== undefined) sum[category] += 1;
+    return sum;
+  }, { "ผอม": 0, "ปกติ": 0, "เริ่มอ้วน": 0, "อ้วน": 0, "รอข้อมูล": 0 });
+  rows.push([
+    "",
+    "สรุปทั้งเดือน",
+    classLevel,
+    rows.reduce((sum, row) => sum + Number(row[3] || 0), 0),
+    "-",
+    "-",
+    "-",
+    "-",
+    `ปกติ ${summary["ปกติ"]} / ผอม ${summary["ผอม"]} / เริ่มอ้วน ${summary["เริ่มอ้วน"]} / อ้วน ${summary["อ้วน"]}`,
+    "-"
+  ]);
+  return {
+    title: `${title} ${month}`,
+    headers: ["เลขที่", "ชื่อ-สกุล", "ชั้น", "จำนวนบันทึก", "วันที่ล่าสุด", "น้ำหนักเฉลี่ย", "ส่วนสูงเฉลี่ย", "BMI ล่าสุด", "แปลผล", "อายุ"],
+    rows
+  };
+}
+
+function average(values) {
+  if (!values.length) return 0;
+  return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2));
 }
 
 function bmiReport(title, students) {

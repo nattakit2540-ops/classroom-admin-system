@@ -1,10 +1,11 @@
 window.firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDhIU0zAzz-GxcZ3vsFwihFazwWFJDM1lQ",
+  authDomain: "pro-3-e6f35.firebaseapp.com",
+  projectId: "pro-3-e6f35",
+  storageBucket: "pro-3-e6f35.firebasestorage.app",
+  messagingSenderId: "55166263675",
+  appId: "1:55166263675:web:0e85c0bc9da26837e6ddde",
+  measurementId: "G-RTNWV1YGQ6"
 };
 
 window.isFirebaseConfigured = () => {
