@@ -6,25 +6,78 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function sameSchool() {
+    function role() {
       return signedIn()
-        && request.resource.data.schoolId == resource.data.schoolId;
+        && exists(/databases/$(database)/documents/userRoles/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/userRoles/$(request.auth.uid)).data.role
+        : "teacher";
     }
 
-    match /attendanceRecords/{recordId} {
-      allow read, write: if signedIn();
+    function isAdmin() {
+      return signedIn()
+        && (
+          role() == "admin"
+          || request.auth.token.email == "stampnattaki17@gmail.com"
+        );
     }
 
-    match /milkRecords/{recordId} {
-      allow read, write: if signedIn();
+    function isTeacher() {
+      return signedIn() && role() in ["teacher", "admin"];
     }
 
-    match /dentalRecords/{recordId} {
-      allow read, write: if signedIn();
+    function dailyCollections() {
+      return resource == null || request.resource != null;
     }
 
-    match /healthRecords/{recordId} {
-      allow read, write: if signedIn();
+    match /userRoles/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /students/{docId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /settings/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /schedules/{docId} {
+      allow read: if signedIn();
+      allow create, update: if isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /attendance/{docId} {
+      allow read: if signedIn();
+      allow create, update: if isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /milkRecords/{docId} {
+      allow read: if signedIn();
+      allow create, update: if isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /toothbrushRecords/{docId} {
+      allow read: if signedIn();
+      allow create, update: if isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /healthRecords/{docId} {
+      allow read: if signedIn();
+      allow create, update: if isTeacher();
+      allow delete: if isAdmin();
+    }
+
+    match /behaviorRecords/{docId} {
+      allow read: if signedIn();
+      allow create, update: if isTeacher();
+      allow delete: if isAdmin();
     }
 
     match /{document=**} {

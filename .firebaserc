@@ -1,5 +1,7 @@
 {
   "projects": {
     "default": "pro-3-e6f35"
-  }
+  },
+  "targets": {},
+  "etags": {}
 }
