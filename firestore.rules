@@ -1,0 +1,34 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function sameSchool() {
+      return signedIn()
+        && request.resource.data.schoolId == resource.data.schoolId;
+    }
+
+    match /attendanceRecords/{recordId} {
+      allow read, write: if signedIn();
+    }
+
+    match /milkRecords/{recordId} {
+      allow read, write: if signedIn();
+    }
+
+    match /dentalRecords/{recordId} {
+      allow read, write: if signedIn();
+    }
+
+    match /healthRecords/{recordId} {
+      allow read, write: if signedIn();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+.env*
+!.env.example
+.npm-cache
+*.log
+tsconfig.tsbuildinfo
+.firebase-config
+.firebase/
