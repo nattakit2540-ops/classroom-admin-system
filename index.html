@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบธุรการชั้นเรียน</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Itim&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="loadingOverlay" class="loading-overlay hidden">
+    <div class="spinner"></div>
+    <p>กำลังโหลดข้อมูล...</p>
+  </div>
+
+  <section id="loginView" class="login-view">
+    <div class="login-panel">
+      <div class="login-hero">
+        <span class="hero-badge">Classroom Admin</span>
+        <h1>ระบบธุรการชั้นเรียน</h1>
+        <p>ดูแลข้อมูล ป.4 - ป.6 ให้เป็นระเบียบในที่เดียว 💜</p>
+      </div>
+      <form id="adminLoginForm" class="login-card">
+        <h2>เข้าสู่ระบบครู</h2>
+        <label>
+          ชื่อผู้ใช้ / อีเมล Admin
+          <input id="adminEmail" type="email" placeholder="กรอกอีเมล Admin" autocomplete="username">
+        </label>
+        <label>
+          รหัสผ่าน
+          <input id="adminPassword" type="password" placeholder="กรอกรหัสผ่าน" autocomplete="current-password">
+        </label>
+        <button type="submit" class="primary-btn">เข้าสู่ระบบ Admin</button>
+        <button type="button" id="anonymousLoginBtn" class="ghost-btn">เข้าใช้งานครูทั่วไป</button>
+      </form>
+    </div>
+  </section>
+
+  <section id="appView" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">📚</div>
+        <div>
+          <h1>ระบบธุรการชั้นเรียน</h1>
+          <p id="schoolNameSide">โรงเรียนของเรา</p>
+        </div>
+      </div>
+      <nav id="menuList" class="menu-list" aria-label="เมนูหลัก"></nav>
+    </aside>
+
+    <div class="content-shell">
+      <header class="topbar">
+        <button id="menuToggle" class="icon-btn mobile-only" aria-label="เปิดเมนู">☰</button>
+        <div>
+          <p id="thaiDate" class="thai-date">วันนี้</p>
+          <h2 id="pageTitle">Dashboard</h2>
+        </div>
+        <div class="top-actions">
+          <select id="globalClassSelect" aria-label="เลือกชั้นเรียน">
+            <option value="all">ทุกชั้น</option>
+            <option value="ป.4">ป.4</option>
+            <option value="ป.5">ป.5</option>
+            <option value="ป.6">ป.6</option>
+          </select>
+          <button id="darkModeBtn" class="icon-btn" aria-label="สลับโหมดสี">🌙</button>
+          <button id="logoutBtn" class="soft-btn">ออกจากระบบ</button>
+        </div>
+      </header>
+
+      <main id="mainContent" class="main-content" aria-live="polite"></main>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="confirmDialog" class="confirm-dialog">
+    <form method="dialog">
+      <h3 id="confirmTitle">ยืนยันรายการ</h3>
+      <p id="confirmMessage">ตรวจสอบก่อนบันทึกข้อมูลนะครับ ✅</p>
+      <div class="dialog-actions">
+        <button id="confirmCancel" value="cancel" class="ghost-btn">ยกเลิก</button>
+        <button id="confirmOk" value="ok" class="danger-btn">ยืนยัน</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
