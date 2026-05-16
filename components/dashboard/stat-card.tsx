@@ -23,11 +23,11 @@ export function StatCard({
   tone?: keyof typeof tones;
 }) {
   return (
-    <Card className="p-4">
+    <Card className="p-4 transition hover:-translate-y-0.5 hover:shadow-[0_22px_70px_rgba(15,23,42,0.12)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{title}</p>
-          <p className="mt-2 text-3xl font-bold">{value}</p>
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
+          <p className="mt-2 text-3xl font-bold tracking-normal">{value}</p>
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{detail}</p>
         </div>
         <div className={cn("grid h-11 w-11 shrink-0 place-items-center rounded-lg", tones[tone])}>
