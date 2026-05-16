@@ -63,6 +63,7 @@ const state = {
   healthRecords: [],
   behaviorRecords: [],
   schedules: [],
+  editingStudentId: null,
   settings: {
     schoolName: "โรงเรียนของเรา",
     academicYear: "2569",
@@ -75,11 +76,11 @@ const state = {
 
 const demoStudents = [
   { id: "s1", studentNo: 1, studentCode: "P401", prefix: "ด.ช.", firstName: "ภาคิน", lastName: "ใจดี", nickname: "คิน", gender: "ชาย", classLevel: "ป.4", birthDate: "2016-02-10", weight: 32, height: 138, parentPhone: "0800000001", address: "ในเขตบริการ", status: "กำลังศึกษา" },
-  { id: "s2", studentNo: 2, studentCode: "P402", prefix: "ด.ญ.", firstName: "ณิชา", lastName: "สดใส", nickname: "นิ", gender: "????", classLevel: "ป.4", birthDate: "2016-08-21", weight: 29, height: 134, parentPhone: "0800000002", address: "ในเขตบริการ", status: "กำลังศึกษา" },
+  { id: "s2", studentNo: 2, studentCode: "P402", prefix: "ด.ญ.", firstName: "ณิชา", lastName: "สดใส", nickname: "นิ", gender: "หญิง", classLevel: "ป.4", birthDate: "2016-08-21", weight: 29, height: 134, parentPhone: "0800000002", address: "ในเขตบริการ", status: "กำลังศึกษา" },
   { id: "s3", studentNo: 1, studentCode: "P501", prefix: "ด.ช.", firstName: "ธันวา", lastName: "ตั้งใจ", nickname: "วา", gender: "ชาย", classLevel: "ป.5", birthDate: "2015-05-04", weight: 37, height: 145, parentPhone: "0800000003", address: "ในเขตบริการ", status: "กำลังศึกษา" },
-  { id: "s4", studentNo: 2, studentCode: "P502", prefix: "ด.ญ.", firstName: "ปุณยา", lastName: "แบ่งปัน", nickname: "ปัน", gender: "????", classLevel: "ป.5", birthDate: "2015-11-12", weight: 35, height: 143, parentPhone: "0800000004", address: "ในเขตบริการ", status: "กำลังศึกษา" },
+  { id: "s4", studentNo: 2, studentCode: "P502", prefix: "ด.ญ.", firstName: "ปุณยา", lastName: "แบ่งปัน", nickname: "ปัน", gender: "หญิง", classLevel: "ป.5", birthDate: "2015-11-12", weight: 35, height: 143, parentPhone: "0800000004", address: "ในเขตบริการ", status: "กำลังศึกษา" },
   { id: "s5", studentNo: 1, studentCode: "P601", prefix: "ด.ช.", firstName: "กฤต", lastName: "ขยัน", nickname: "กฤต", gender: "ชาย", classLevel: "ป.6", birthDate: "2014-03-17", weight: 43, height: 151, parentPhone: "0800000005", address: "ในเขตบริการ", status: "กำลังศึกษา" },
-  { id: "s6", studentNo: 2, studentCode: "P602", prefix: "ด.ญ.", firstName: "มนัสวี", lastName: "เมตตา", nickname: "มีน", gender: "????", classLevel: "ป.6", birthDate: "2014-09-30", weight: 41, height: 149, parentPhone: "0800000006", address: "ในเขตบริการ", status: "กำลังศึกษา" }
+  { id: "s6", studentNo: 2, studentCode: "P602", prefix: "ด.ญ.", firstName: "มนัสวี", lastName: "เมตตา", nickname: "มีน", gender: "หญิง", classLevel: "ป.6", birthDate: "2014-09-30", weight: 41, height: 149, parentPhone: "0800000006", address: "ในเขตบริการ", status: "กำลังศึกษา" }
 ];
 
 const $ = (selector) => document.querySelector(selector);
@@ -168,6 +169,28 @@ async function loadFirebaseModules() {
 
 async function loginAnonymous() {
   state.role = "teacher";
+  if (state.firebaseReady) {
+    try {
+      showLoading(true);
+      await signInAnonymously(state.auth);
+      showToast("เข้าสู่ระบบครูทั่วไปแล้ว ✅");
+      return;
+    } catch (error) {
+      if (error.code === "auth/configuration-not-found" || error.code === "auth/admin-restricted-operation") {
+        state.firebaseReady = false;
+        state.students = demoStudents;
+        state.user = { uid: "local-teacher", isAnonymous: true };
+        showApp();
+        showToast("Firebase Anonymous ยังไม่ได้เปิด ใช้โหมดทดลองชั่วคราว ✅");
+        return;
+      }
+      handleError(error, "เข้าสู่ระบบครูทั่วไปไม่สำเร็จ");
+      return;
+    } finally {
+      showLoading(false);
+    }
+  }
+
   state.user = { uid: "local-teacher", isAnonymous: true };
   showApp();
   showToast("เข้าสู่ระบบครูทั่วไปแล้ว ✅");
@@ -841,7 +864,7 @@ function studentRecordCard(student, statuses) {
   return `
     <article class="student-card status-${firstStatus}" data-student-id="${student.id}" data-status="${firstStatus}">
       <div class="student-card-head">
-        <div class="student-avatar">${student.gender === "????" ? "👧" : "👦"}</div>
+        <div class="student-avatar">${student.gender === "หญิง" ? "👧" : "👦"}</div>
         <div>
           <p class="student-meta">เลขที่ ${String(student.studentNo).padStart(2, "0")} • ${student.classLevel}</p>
           <h4 class="student-name">${fullName(student)}</h4>
@@ -958,7 +981,7 @@ function renderHealthTable() {
           <article class="card health-card">
             <div class="bmi-gauge" style="--gauge:${gauge}%"><span>💜</span></div>
             <div>
-              <h3>${student.gender === "????" ? "👧" : "👦"} ${fullName(student)}</h3>
+              <h3>${student.gender === "หญิง" ? "👧" : "👦"} ${fullName(student)}</h3>
               <p>น้ำหนัก: ${student.weight || "-"} kg • ส่วนสูง: ${student.height || "-"} cm</p>
               <p>BMI: ${bmi || "-"} • <strong class="${bmiClass(category)}">${category}</strong></p>
               <p>อายุ: ${student.birthDate ? calculateAge(student.birthDate) : "-"}</p>
@@ -1579,8 +1602,9 @@ function statusCell(value) {
 }
 
 function renderStudents() {
+  const editingStudent = state.students.find((item) => item.id === state.editingStudentId);
   $("#mainContent").innerHTML = `
-    ${sectionHeader("ระบบจัดการข้อมูลนักเรียน", "เพิ่ม / แก้ไข / ź นักเรียน")}
+    ${sectionHeader("ระบบจัดการข้อมูลนักเรียน", "เพิ่ม / แก้ไข / ลบ นักเรียน")}
     ${commonToolbar()}
     <div class="card">
       <h3>เพิ่มนักเรียน</h3>
@@ -1591,7 +1615,7 @@ function renderStudents() {
         <label>ชื่อ<input id="firstName"></label>
         <label>นามสกุล<input id="lastName"></label>
         <label>ชื่อเล่น<input id="nickname"></label>
-        <label>เพศ<select id="gender"><option>ชาย</option><option>????</option><option>อื่น ๆ</option></select></label>
+        <label>เพศ<select id="gender"><option>ชาย</option><option>หญิง</option><option>อื่น ๆ</option></select></label>
         <label>ชั้นเรียน<select id="studentClass">${classLevels.map((level) => `<option>${level}</option>`).join("")}</select></label>
         <label>วันเกิด<input id="birthDate" type="date"></label>
         <label>น้ำหนัก<input id="weight" type="number" step="0.1"></label>
@@ -1611,10 +1635,50 @@ function renderStudents() {
   `;
   bindPageClassSync(() => renderStudents());
   renderStudentTable();
+  hydrateStudentForm(editingStudent);
   $("#studentSearch").addEventListener("input", renderStudentTable);
   $("#addStudentBtn").addEventListener("click", addStudent);
   $("#downloadStudentCsvBtn").addEventListener("click", downloadStudentCsvTemplate);
   $("#studentCsvInput").addEventListener("change", importStudentsFromCSV);
+}
+
+function hydrateStudentForm(student) {
+  const submitButton = $("#addStudentBtn");
+  const heading = $("#mainContent .card h3");
+  if (!student) {
+    if (submitButton) submitButton.textContent = "เพิ่มนักเรียน";
+    if (heading) heading.textContent = "เพิ่มนักเรียน";
+    return;
+  }
+
+  if (heading) heading.textContent = "แก้ไขข้อมูลนักเรียน";
+  if (submitButton) submitButton.textContent = "บันทึกการแก้ไข";
+
+  $("#studentNo").value = student.studentNo || "";
+  $("#studentCode").value = student.studentCode || "";
+  $("#prefix").value = student.prefix || "ด.ช.";
+  $("#firstName").value = student.firstName || "";
+  $("#lastName").value = student.lastName || "";
+  $("#nickname").value = student.nickname || "";
+  $("#gender").value = student.gender || "ชาย";
+  $("#studentClass").value = student.classLevel || selectedClass();
+  $("#birthDate").value = student.birthDate || "";
+  $("#weight").value = student.weight || "";
+  $("#height").value = student.height || "";
+  $("#parentPhone").value = student.parentPhone || "";
+  $("#status").value = student.status || "กำลังศึกษา";
+  $("#address").value = student.address || "";
+
+  const cancelButton = document.createElement("button");
+  cancelButton.id = "cancelEditStudentBtn";
+  cancelButton.type = "button";
+  cancelButton.className = "ghost-btn";
+  cancelButton.textContent = "ยกเลิกแก้ไข";
+  cancelButton.addEventListener("click", () => {
+    state.editingStudentId = null;
+    renderStudents();
+  });
+  submitButton.insertAdjacentElement("afterend", cancelButton);
 }
 
 function renderStudentTable() {
@@ -1638,7 +1702,7 @@ function renderStudentTable() {
             <td>${statusBadge(student.status || "รอข้อมูล")}</td>
             <td>
               <button class="soft-btn" data-edit="${student.id}">แก้ไข</button>
-              <button class="danger-btn" data-delete="${student.id}">ź</button>
+              <button class="danger-btn" data-delete="${student.id}">ลบ</button>
             </td>
           </tr>
         `).join("")}
@@ -1676,9 +1740,33 @@ async function addStudent() {
     showToast("กรุณากรอกชื่อ นามสกุล และชั้นเรียน");
     return;
   }
+
+  if (state.editingStudentId) {
+    try {
+      showLoading(true);
+      const current = state.students.find((item) => item.id === state.editingStudentId);
+      const updated = { ...payload, createdAt: current?.createdAt || payload.createdAt };
+      if (state.firebaseReady) await setDoc(doc(state.db, "students", state.editingStudentId), updated, { merge: true });
+      state.students = state.students.map((item) => item.id === state.editingStudentId ? { id: item.id, ...updated } : item);
+      state.editingStudentId = null;
+      showToast("แก้ไขข้อมูลนักเรียนสำเร็จแล้ว ✅");
+      playSuccessSound();
+      renderStudents();
+    } catch (error) {
+      if (error.code === "permission-denied") {
+        showToast("แก้ไขไม่สำเร็จ: บัญชีนี้ยังไม่มีสิทธิ์ Admin ใน Firestore");
+      } else {
+        handleError(error, "แก้ไขข้อมูลนักเรียนไม่สำเร็จ");
+      }
+    } finally {
+      showLoading(false);
+    }
+    return;
+  }
+
   const saved = await saveToFirestore("students", payload, "เพิ่มนักเรียนสำเร็จแล้ว ✅");
   if (saved) {
-    state.students.push({ id: crypto.randomUUID(), ...payload });
+    state.students.push({ id: saved, ...payload });
     renderStudents();
   }
 }
@@ -1866,14 +1954,9 @@ async function updateStudent(id) {
   }
   const student = state.students.find((item) => item.id === id);
   if (!student) return;
-  const newPhone = prompt("แก้ไขเบอร์ผู้ปกครอง", student.parentPhone || "");
-  if (newPhone === null) return;
-  const payload = { ...student, parentPhone: newPhone, updatedAt: nowValue() };
-  if (state.firebaseReady) await setDoc(doc(state.db, "students", id), payload, { merge: true });
-  state.students = state.students.map((item) => item.id === id ? payload : item);
-  showToast("แก้ไขข้อมูลนักเรียนสำเร็จแล้ว ✅");
-  playSuccessSound();
-  renderStudentTable();
+  state.editingStudentId = id;
+  renderStudents();
+  document.querySelector(".card")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function deleteStudent(id) {
@@ -1930,12 +2013,14 @@ async function saveToFirestore(collectionName, payload, message) {
     const ok = await confirmAction("ตรวจสอบก่อนบันทึก", "ตรวจสอบก่อนบันทึกข้อมูลนะครับ ✅");
     if (!ok) return false;
     showLoading(true);
+    let savedId = crypto.randomUUID();
     if (state.firebaseReady) {
-      await addDoc(collection(state.db, collectionName), payload);
+      const savedDoc = await addDoc(collection(state.db, collectionName), payload);
+      savedId = savedDoc.id;
     }
     showToast(message);
     playSuccessSound();
-    return true;
+    return savedId;
   } catch (error) {
     handleError(error, "บันทึกข้อมูลไม่สำเร็จ");
     return false;
