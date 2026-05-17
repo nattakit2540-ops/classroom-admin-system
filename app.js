@@ -21,6 +21,7 @@ let serverTimestamp;
 const adminEmails = ["stampnattaki17@gmail.com"];
 
 const classLevels = ["ป.4", "ป.5", "ป.6"];
+const uiDefaultSchoolName = "โรงเรียนชุมชนบ้านหนองผึ้ง";
 const localStorageKey = "sakura-sensei-classroom-v1";
 const localStateCollections = [
   "students",
@@ -45,7 +46,6 @@ const schedulePeriods = [
 const menuItems = [
   { id: "dashboard", icon: "🌸", title: "Dashboard", subtitle: "วันนี้เด็ก ๆ มาเรียนกี่คนนะ? 🏫" },
   { id: "daily", icon: "🏫", title: "เช็กชื่อรายวัน", subtitle: "บันทึกการมาเรียนประจำวัน" },
-  { id: "subject", icon: "📚", title: "เข้าเรียน", subtitle: "เช็กชื่อรายคาบเรียน" },
   { id: "classwork", icon: "🗂️", title: "งานประจำชั้น", subtitle: "ภาพรวมวันนี้และงานที่ต้องติดตาม" },
   { id: "milk", icon: "🥛", title: "ดื่มนม", subtitle: "บันทึกดื่มนมเรียบร้อยแล้ว 🥛" },
   { id: "toothbrush", icon: "🪥", title: "แปรงฟัน", subtitle: "สุขนิสัยดีเริ่มทุกวัน" },
@@ -75,7 +75,7 @@ const state = {
   schedules: [],
   editingStudentId: null,
   settings: {
-    schoolName: "โรงเรียนของเรา",
+    schoolName: uiDefaultSchoolName,
     academicYear: "2569",
     semester: "1",
     teacherName: "ครูประจำชั้น",
@@ -109,6 +109,7 @@ function loadLocalState() {
       if (Array.isArray(saved[name])) state[name] = saved[name];
     });
     state.settings = { ...state.settings, ...(saved.settings || {}) };
+    if (state.settings.schoolName === "โรงเรียนของเรา") state.settings.schoolName = uiDefaultSchoolName;
     if (!state.students.length) state.students = demoStudents.map((student) => ({ ...student }));
   } catch (error) {
     console.warn("Local demo data could not be loaded", error);
@@ -131,6 +132,7 @@ function persistLocalState() {
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindGlobalEvents();
+  offlineInit();
   renderMenu();
   setThaiDate();
   applyStoredTheme();
@@ -138,16 +140,148 @@ document.addEventListener("DOMContentLoaded", async () => {
   await initFirebase();
 });
 
+function offlineInit() {
+  offlineRenderWarning();
+  window.addEventListener("online", offlineRenderWarning);
+  window.addEventListener("offline", offlineRenderWarning);
+}
+
+function offlineRenderWarning() {
+  let banner = $("#offlineWarning");
+  if (navigator.onLine) {
+    banner?.remove();
+    return;
+  }
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "offlineWarning";
+    banner.className = "offline-warning";
+    banner.innerHTML = `
+      <span>📡 ตอนนี้ออฟไลน์ ข้อมูลบางส่วนอาจบันทึกในเครื่องก่อน</span>
+      <button type="button" data-offline-retry>ลองใหม่</button>
+    `;
+    document.body.prepend(banner);
+    banner.querySelector("[data-offline-retry]").addEventListener("click", () => window.location.reload());
+  }
+}
+
+function offlineShowFriendlyError(title, error) {
+  const old = $(".offline-error-state");
+  old?.remove();
+  const box = document.createElement("div");
+  box.className = "offline-error-state";
+  box.innerHTML = `
+    <strong>🌸 ${title}</strong>
+    <span>${navigator.onLine ? "ระบบเชื่อมต่อข้อมูลไม่ได้ชั่วคราว" : "ตอนนี้ออฟไลน์อยู่"}</span>
+    <button type="button" data-offline-retry>ลองใหม่</button>
+  `;
+  $("#mainContent")?.prepend(box);
+  box.querySelector("[data-offline-retry]").addEventListener("click", () => window.location.reload());
+  console.warn(title, error);
+}
+
 function bindGlobalEvents() {
   $("#anonymousLoginBtn").addEventListener("click", loginAnonymous);
   $("#adminLoginForm").addEventListener("submit", loginAdmin);
   $("#logoutBtn").addEventListener("click", logout);
   $("#darkModeBtn").addEventListener("click", toggleDarkMode);
+  uiInitGlobalClassSegment();
   $("#globalClassSelect").addEventListener("change", (event) => {
     state.classLevel = event.target.value;
+    uiSyncGlobalClassSegment();
     renderActivePage();
   });
   $("#menuToggle").addEventListener("click", () => $(".sidebar").classList.toggle("open"));
+  $("#mainContent").addEventListener("input", uiSaveDraft);
+  $("#mainContent").addEventListener("change", uiSaveDraft);
+}
+
+function uiInitGlobalClassSegment() {
+  const select = $("#globalClassSelect");
+  if (!select || $(".dashboard-class-segment")) return;
+  const segment = document.createElement("div");
+  segment.className = "dashboard-class-segment";
+  segment.setAttribute("aria-label", "เลือกชั้นเรียน");
+  segment.innerHTML = [
+    ["all", "ทุกชั้น"],
+    ["ป.4", "ป.4"],
+    ["ป.5", "ป.5"],
+    ["ป.6", "ป.6"]
+  ].map(([value, label]) => `<button type="button" class="dashboard-class-segment-btn" data-ui-class="${value}">${label}</button>`).join("");
+  select.insertAdjacentElement("afterend", segment);
+  select.classList.add("dashboard-native-class-select");
+  segment.querySelectorAll("[data-ui-class]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.classLevel = button.dataset.uiClass;
+      select.value = state.classLevel;
+      uiSyncGlobalClassSegment();
+      renderActivePage();
+    });
+  });
+  uiSyncGlobalClassSegment();
+}
+
+function uiSyncGlobalClassSegment() {
+  $$("[data-ui-class]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.uiClass === state.classLevel);
+  });
+}
+
+function uiDraftKey() {
+  return `nongpeung-draft-${state.activePage}-${state.classLevel}`;
+}
+
+function uiSaveDraft(event) {
+  const field = event.target;
+  if (!field || !["INPUT", "TEXTAREA", "SELECT"].includes(field.tagName) || !field.id) return;
+  const fields = {};
+  $$("#mainContent input[id], #mainContent textarea[id], #mainContent select[id]").forEach((input) => {
+    if (input.type === "file") return;
+    fields[input.id] = input.type === "checkbox" ? input.checked : input.value;
+  });
+  if (!Object.keys(fields).length) return;
+  localStorage.setItem(uiDraftKey(), JSON.stringify({ fields, savedAt: new Date().toISOString() }));
+}
+
+function uiOfferDraftRestore() {
+  if (state.activePage === "dashboard") return;
+  const raw = localStorage.getItem(uiDraftKey());
+  if (!raw || !$("#mainContent input[id], #mainContent textarea[id], #mainContent select[id]")) return;
+  const notice = document.createElement("div");
+  notice.className = "dashboard-draft-restore";
+  notice.innerHTML = `
+    <span>🌸 พบข้อมูลแบบร่างที่กรอกค้างไว้</span>
+    <div>
+      <button type="button" data-ui-restore-draft>กู้คืน</button>
+      <button type="button" data-ui-discard-draft>ไม่ใช้</button>
+    </div>
+  `;
+  $("#mainContent").prepend(notice);
+  notice.querySelector("[data-ui-restore-draft]").addEventListener("click", () => uiRestoreDraft(notice));
+  notice.querySelector("[data-ui-discard-draft]").addEventListener("click", () => {
+    uiClearDraft();
+    notice.remove();
+  });
+}
+
+function uiRestoreDraft(notice) {
+  try {
+    const draft = JSON.parse(localStorage.getItem(uiDraftKey()) || "{}");
+    Object.entries(draft.fields || {}).forEach(([id, value]) => {
+      const input = document.getElementById(id);
+      if (!input) return;
+      if (input.type === "checkbox") input.checked = Boolean(value);
+      else input.value = value;
+    });
+    showToast("กู้คืนแบบร่างเรียบร้อยแล้ว Sensei! 🌸");
+  } catch (error) {
+    console.warn("Draft restore failed", error);
+  }
+  notice?.remove();
+}
+
+function uiClearDraft() {
+  localStorage.removeItem(uiDraftKey());
 }
 
 async function initFirebase() {
@@ -355,7 +489,8 @@ function renderMenu() {
 }
 
 function renderActivePage() {
-  const item = menuItems.find((menu) => menu.id === state.activePage);
+  if (state.activePage === "subject") state.activePage = "daily";
+  const item = menuItems.find((menu) => menu.id === state.activePage) || menuItems[0];
   $("#pageTitle").textContent = item.title;
   $("#mainContent").style.animation = "none";
   $("#mainContent").offsetHeight;
@@ -364,7 +499,6 @@ function renderActivePage() {
   const renderers = {
     dashboard: loadDashboard,
     daily: () => renderAttendancePage("daily"),
-    subject: () => renderAttendancePage("subject"),
     classwork: renderClasswork,
     milk: renderMilk,
     toothbrush: renderToothbrush,
@@ -375,7 +509,8 @@ function renderActivePage() {
     students: renderStudents,
     settings: renderSettings
   };
-  renderers[state.activePage]();
+  (renderers[state.activePage] || renderers.dashboard)();
+  uiOfferDraftRestore();
 }
 
 function showApp() {
@@ -446,6 +581,7 @@ function loadDashboard() {
   const recent = getRecentActivities();
   const dashboardTasks = dashboardBuildTasks({ todayAttendance, milkToday, brushToday, todayBehavior });
   const dashboardAlerts = dashboardBuildAlerts({ students, todayAttendance, milkToday, brushToday, absent, late, total, bmiSummary });
+  const dashboardFollowUps = dashboardBuildFollowUps(students);
 
   $("#mainContent").innerHTML = `
     <section class="dashboard-page">
@@ -492,6 +628,7 @@ function loadDashboard() {
         ${dashboardRenderQuickActions()}
         ${dashboardRenderTasks(dashboardTasks)}
         ${dashboardRenderAlerts(dashboardAlerts)}
+        ${dashboardRenderFollowUps(dashboardFollowUps)}
         ${dashboardRenderStudentProfiles(students)}
         ${dashboardRenderPrintTools()}
 
@@ -517,7 +654,6 @@ function loadDashboard() {
         <article class="bento-card span-4">
           <div class="card-head"><h3>Daily Tasks</h3><span class="badge warning">วันนี้</span></div>
           ${taskRow("เช็กชื่อรายวัน", todayAttendance.length > 0, true)}
-          ${taskRow("เช็กชื่อเข้าเรียน", state.attendance.some((item) => item.date === todayISO() && item.type === "subject"), false)}
           ${taskRow("บันทึกดื่มนม", milkToday.length > 0, milkToday.length === 0)}
           ${taskRow("บันทึกแปรงฟัน", brushToday.length > 0, false)}
           ${taskRow("บันทึกพฤติกรรม", todayBehavior.length > 0, false)}
@@ -598,10 +734,8 @@ function dashboardMetricCard(icon, label, value, unit, hint, tone) {
 
 function dashboardBuildTasks({ milkToday, brushToday, todayBehavior }) {
   const dailyDone = state.attendance.some((item) => item.date === todayISO() && item.type === "daily");
-  const subjectDone = state.attendance.some((item) => item.date === todayISO() && item.type === "subject");
   return [
     { label: "เช็กชื่อโฮมรูม", done: dailyDone, urgent: !dailyDone, page: "daily" },
-    { label: "เช็กชื่อเข้าเรียน", done: subjectDone, urgent: false, page: "subject" },
     { label: "บันทึกดื่มนม", done: milkToday.length > 0, urgent: milkToday.length === 0, page: "milk" },
     { label: "บันทึกแปรงฟัน", done: brushToday.length > 0, urgent: brushToday.length === 0, page: "toothbrush" },
     { label: "บันทึกพฤติกรรม", done: todayBehavior.length > 0, urgent: false, page: "behavior" }
@@ -681,6 +815,53 @@ function dashboardRenderAlerts(alerts) {
   `;
 }
 
+function dashboardBuildFollowUps(students) {
+  return students.map((student) => {
+    const reasons = [];
+    const absentCount = dashboardStudentStatusCount(state.attendance, student.id, ["ขาด", "ขาดเรียน"]);
+    const lateCount = dashboardStudentStatusCount(state.attendance, student.id, ["มาสาย"]);
+    const milkMiss = dashboardStudentStatusCount(state.milkRecords, student.id, ["ไม่ดื่ม", "ขาด", "ลา"]);
+    const brushMiss = dashboardStudentStatusCount(state.toothbrushRecords, student.id, ["ไม่แปรง", "ลืมอุปกรณ์", "ขาด", "ลา"]);
+    const discipline = state.behaviorRecords.filter((item) => item.studentId === student.id && item.behaviorType === "discipline").length;
+    const bmi = calculateBMI(student.weight, student.height);
+    const bmiCategory = getBMICategory(bmi);
+
+    if (absentCount >= 2) reasons.push("ขาดเรียนต่อเนื่อง");
+    if (lateCount >= 2) reasons.push("มาสายซ้ำ");
+    if (milkMiss >= 2) reasons.push("ไม่ดื่มนมบ่อย");
+    if (brushMiss >= 2) reasons.push("ไม่แปรงฟันต่อเนื่อง");
+    if (["ผอม", "เริ่มอ้วน", "อ้วน"].includes(bmiCategory)) reasons.push(`BMI ${bmiCategory}`);
+    if (discipline >= 2) reasons.push("ผิดระเบียบซ้ำ");
+
+    return { student, reasons };
+  }).filter((item) => item.reasons.length);
+}
+
+function dashboardRenderFollowUps(items) {
+  return `
+    <article class="dashboard-card dashboard-follow-card dashboard-span-4">
+      <div class="dashboard-card-head">
+        <div>
+          <span>Smart Follow-up Students</span>
+          <h3>นักเรียนที่ควรติดตาม</h3>
+        </div>
+        <strong>${items.length}</strong>
+      </div>
+      <div class="dashboard-follow-list">
+        ${items.slice(0, 5).map(({ student, reasons }) => `
+          <button type="button" class="dashboard-follow-item" data-dashboard-student="${student.id}">
+            <span>${student.gender === "หญิง" ? "👧" : "👦"}</span>
+            <div>
+              <strong>${fullName(student)}</strong>
+              <p>${reasons.slice(0, 3).join(" • ")}</p>
+            </div>
+          </button>
+        `).join("") || `<p class="dashboard-empty">ยังไม่มีนักเรียนที่ต้องติดตามเป็นพิเศษวันนี้ 🌸</p>`}
+      </div>
+    </article>
+  `;
+}
+
 function dashboardRenderQuickActions() {
   const actions = [
     ["เช็กชื่อวันนี้", "daily", "🏫"],
@@ -717,6 +898,7 @@ function dashboardRenderPrintTools() {
         <button type="button" class="dashboard-print-button" data-dashboard-print="today">รายงานวันนี้</button>
         <button type="button" class="dashboard-print-button" data-dashboard-print="month">รายงานรายเดือน</button>
         <button type="button" class="dashboard-print-button" data-dashboard-print="student">รายงานนักเรียนรายคน</button>
+        <button type="button" class="dashboard-print-button" data-dashboard-export="today-csv">Export CSV วันนี้</button>
       </div>
     </article>
   `;
@@ -830,13 +1012,17 @@ function dashboardRecordStatus(collectionItems, studentId) {
 function dashboardRepeatedLateStudents(students) {
   const month = todayISO().slice(0, 7);
   return students.filter((student) => {
-    const lateCount = state.attendance
-      .filter((item) => String(item.date || "").startsWith(month))
-      .flatMap((item) => item.records || [])
-      .filter((record) => record.studentId === student.id && record.status === "มาสาย")
-      .length;
+    const lateCount = dashboardStudentStatusCount(state.attendance, student.id, ["มาสาย"], month);
     return lateCount >= 2;
   });
+}
+
+function dashboardStudentStatusCount(collectionItems, studentId, statuses, month = todayISO().slice(0, 7)) {
+  return collectionItems
+    .filter((item) => String(item.date || item.recordDate || "").startsWith(month))
+    .flatMap((item) => item.records || [])
+    .filter((record) => record.studentId === studentId && statuses.includes(record.status))
+    .length;
 }
 
 function dashboardPrintReport(type) {
@@ -862,15 +1048,21 @@ function dashboardPrintReport(type) {
     `;
   }).join("");
   const sheet = document.createElement("section");
-  sheet.className = "dashboard-print-sheet";
+  sheet.className = "dashboard-print-sheet print-report-sheet";
   sheet.innerHTML = `
-    <h1>Nongpeung 4 - 6 Classroom</h1>
-    <h2>${titleMap[type] || titleMap.today} • ${state.classLevel === "all" ? "รวมทั้งหมด" : state.classLevel}</h2>
-    <p>วันที่ ${new Intl.DateTimeFormat("th-TH", { dateStyle: "full" }).format(new Date())} • ครู ${state.settings.teacherName}</p>
+    <div class="print-report-head">
+      <h1>${state.settings.schoolName || uiDefaultSchoolName}</h1>
+      <h2>${titleMap[type] || titleMap.today}</h2>
+      <p>ระดับชั้น ${state.classLevel === "all" ? "ป.4 - ป.6" : state.classLevel} • วันที่ ${new Intl.DateTimeFormat("th-TH", { dateStyle: "full" }).format(new Date())}</p>
+    </div>
     <table>
       <thead><tr><th>เลขที่</th><th>ชื่อ</th><th>ชั้น</th><th>มาเรียน</th><th>นม</th><th>แปรงฟัน</th><th>BMI</th><th>ดี/ผิด</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
+    <div class="print-report-signature">
+      <span>ลงชื่อ................................................ ครูประจำชั้น</span>
+      <span>(${state.settings.teacherName || "ครูประจำชั้น"})</span>
+    </div>
   `;
   document.body.classList.add("dashboard-printing");
   document.body.appendChild(sheet);
@@ -879,6 +1071,34 @@ function dashboardPrintReport(type) {
     sheet.remove();
     document.body.classList.remove("dashboard-printing");
   }, 300);
+}
+
+function dashboardExportTodayCSV() {
+  const students = filterByClass(state.students, state.classLevel);
+  const rows = [
+    ["โรงเรียน", state.settings.schoolName || uiDefaultSchoolName],
+    ["วันที่", todayISO()],
+    [],
+    ["เลขที่", "ชื่อ", "ชั้น", "มาเรียน", "ดื่มนม", "แปรงฟัน", "BMI", "พฤติกรรมดี", "ผิดระเบียบ", "เบอร์ผู้ปกครอง"],
+    ...students.map((student) => {
+      const summary = dashboardStudentSummary(student);
+      return [
+        student.studentNo || "",
+        fullName(student),
+        student.classLevel || "",
+        summary.attendance,
+        summary.milk,
+        summary.brush,
+        summary.bmi,
+        summary.good,
+        summary.discipline,
+        student.parentPhone || ""
+      ];
+    })
+  ];
+  const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll("\"", "\"\"")}"`).join(",")).join("\n");
+  downloadTextFile(`dashboard-today-${todayISO()}.csv`, "\ufeff" + csv, "text/csv;charset=utf-8");
+  showToast("Export CSV วันนี้เรียบร้อยแล้ว Sensei! 🌸✅");
 }
 
 function percent(value, total) {
@@ -1021,6 +1241,7 @@ function bindDashboardActions() {
     button.addEventListener("click", () => {
       state.classLevel = button.dataset.dashboardClass;
       $("#globalClassSelect").value = state.classLevel;
+      uiSyncGlobalClassSegment();
       loadDashboard();
     });
   });
@@ -1036,6 +1257,9 @@ function bindDashboardActions() {
   $$("[data-dashboard-print]").forEach((button) => {
     button.addEventListener("click", () => dashboardPrintReport(button.dataset.dashboardPrint));
   });
+  $$("[data-dashboard-export]").forEach((button) => {
+    button.addEventListener("click", dashboardExportTodayCSV);
+  });
   $(".dashboard-profile-close")?.addEventListener("click", dashboardCloseStudentProfile);
   $("#dashboardProfileModal")?.addEventListener("click", (event) => {
     if (event.target.id === "dashboardProfileModal") dashboardCloseStudentProfile();
@@ -1043,9 +1267,9 @@ function bindDashboardActions() {
 }
 
 function renderAttendancePage(type) {
+  if (type === "subject") type = "daily";
   const config = {
-    daily: { title: "ระบบเช็กชื่อรายวัน", statuses: ["มาเรียน", "ขาด", "ลา", "มาสาย"], extra: "" },
-    subject: { title: "เช็กชื่อเข้าเรียน", statuses: ["เข้าเรียน", "ขาดเรียน", "มาสาย", "ลา"], extra: "<input id=\"period\" placeholder=\"คาบที่ เช่น 1\"><input id=\"subjectName\" placeholder=\"รายวิชา\"><input id=\"teacherName\" placeholder=\"ครูผู้สอน\">" }
+    daily: { title: "ระบบเช็กชื่อรายวัน", statuses: ["มาเรียน", "ขาด", "ลา", "มาสาย"], extra: "" }
   }[type];
 
   $("#mainContent").innerHTML = `
@@ -1574,6 +1798,7 @@ async function saveSchedule() {
   }
   state.schedules = [...state.schedules.filter((item) => item.classLevel !== selectedClass()), ...rows.map((row) => ({ id: crypto.randomUUID(), ...row }))];
   persistLocalState();
+  uiClearDraft();
   showToast("บันทึกตารางเรียนสำเร็จแล้ว ✅");
   playSuccessSound();
 }
@@ -1581,23 +1806,24 @@ async function saveSchedule() {
 function renderReports(kind = "all") {
   const reportTypes = [
     "รายงานการมาเรียนรายวัน", "รายงานการมาเรียนรายเดือน",
-    "รายงานเช็กชื่อเข้าเรียน", "รายงานดื่มนม", "รายงานดื่มนมรายเดือน",
+    "รายงานดื่มนม", "รายงานดื่มนมรายเดือน",
     "รายงานแปรงฟัน", "รายงานแปรงฟันรายเดือน", "รายงาน BMI",
     "รายงานสุขภาพรายเดือน", "รายงานอายุ", "รายงานพฤติกรรม", "รายงานภาพรวมรายห้อง"
   ];
+  const visibleReportTypes = reportTypes;
   $("#mainContent").innerHTML = `
     ${sectionHeader("ระบบรายงาน", "กรองข้อมูล พิมพ์รายงาน และ Export CSV")}
     <div class="toolbar">
       <input id="reportDate" type="date" value="${todayISO()}">
       <select id="pageClassSelect">${classLevels.map((level) => `<option value="${level}" ${level === selectedClass() ? "selected" : ""}>${level}</option>`).join("")}</select>
       <input id="reportStudent" type="search" placeholder="กรองชื่อนักเรียน">
-      <select id="reportType">${reportTypes.map((type) => `<option ${kind !== "all" && type.includes(kind) ? "selected" : ""}>${type}</option>`).join("")}</select>
+      <select id="reportType">${visibleReportTypes.map((type) => `<option ${kind !== "all" && type.includes(kind) ? "selected" : ""}>${type}</option>`).join("")}</select>
       <button id="printReportBtn" class="soft-btn">พิมพ์รายงาน</button>
       <button id="exportCsvBtn" class="primary-btn">Export CSV</button>
       <button id="exportPdfBtn" class="ghost-btn">Export PDF</button>
     </div>
     <div class="report-card-grid" style="margin-bottom:1rem">
-      ${reportTypes.map((type) => `<button class="card report-type-card" data-report="${type}">${reportIcon(type)} ${type}</button>`).join("")}
+      ${visibleReportTypes.map((type) => `<button class="card report-type-card" data-report="${type}">${reportIcon(type)} ${type}</button>`).join("")}
     </div>
     <div class="card">
       <h3 id="reportTitle">${reportTypes[0]}</h3>
@@ -1663,9 +1889,6 @@ function buildCurrentReport() {
   if (type.includes("รายเดือน") && type.includes("มาเรียน")) {
     const month = date.slice(0, 7);
     return monthlyAttendanceSummaryReport("รายงานการมาเรียนรายเดือน", month, classLevel, students);
-  }
-  if (type.includes("เข้าเรียน")) {
-    return attendanceReport("รายงานเช็กชื่อเข้าเรียน", date, classLevel, students, (item) => item.type === "subject" && item.date === date, false, true);
   }
   if (type.includes("ดื่มนมรายเดือน")) {
     return monthlyDailyRecordSummaryReport("รายงานดื่มนมรายเดือน", date.slice(0, 7), classLevel, students, state.milkRecords, ["ดื่ม", "ไม่ดื่ม", "ลา", "ขาด"]);
@@ -2125,6 +2348,7 @@ async function addStudent() {
       state.students = state.students.map((item) => item.id === state.editingStudentId ? { id: item.id, ...updated } : item);
       state.editingStudentId = null;
       persistLocalState();
+      uiClearDraft();
       showToast("แก้ไขข้อมูลนักเรียนสำเร็จแล้ว ✅");
       playSuccessSound();
       renderStudents();
@@ -2388,6 +2612,7 @@ async function saveSettings() {
   $("#schoolNameSide").textContent = state.settings.schoolName;
   if (state.firebaseReady) await setDoc(doc(state.db, "settings", "main"), state.settings, { merge: true });
   persistLocalState();
+  uiClearDraft();
   showToast("บันทึกตั้งค่าระบบสำเร็จแล้ว ✅");
   playSuccessSound();
 }
@@ -2419,7 +2644,7 @@ async function resetLocalDemoData() {
   });
   state.students = demoStudents.map((student) => ({ ...student }));
   state.settings = {
-    schoolName: "โรงเรียนของเรา",
+    schoolName: uiDefaultSchoolName,
     academicYear: "2569",
     semester: "1",
     teacherName: "ครูประจำชั้น",
@@ -2444,6 +2669,7 @@ async function saveToFirestore(collectionName, payload, message) {
     }
     showToast(message);
     playSuccessSound();
+    uiClearDraft();
     return savedId;
   } catch (error) {
     handleError(error, "บันทึกข้อมูลไม่สำเร็จ");
@@ -2521,7 +2747,7 @@ function tableWrap(content) {
 }
 
 function emptyState(title, message) {
-  return `<div class="card empty-state"><strong>${title}</strong><span>${message}</span></div>`;
+  return `<div class="card empty-state dashboard-empty-state"><span>🌸</span><strong>${title}</strong><small>${message}</small></div>`;
 }
 
 function bindPageClassSync(callback = renderActivePage) {
@@ -2722,7 +2948,7 @@ function slugifyThai(value) {
 }
 
 function showLoading(show) {
-  $("#loadingOverlay p").textContent = "Sensei กำลังเตรียมข้อมูลให้นะ 🌸";
+  $("#loadingOverlay p").textContent = "🌸 Sensei กำลังเตรียมข้อมูลให้นะ...";
   $("#loadingOverlay").classList.toggle("hidden", !show);
 }
 
@@ -2738,6 +2964,7 @@ function renderSakuraLayer() {
 
 function handleError(error, fallbackMessage) {
   console.error(error);
+  offlineShowFriendlyError(fallbackMessage, error);
   showToast(`${fallbackMessage}: ${error.message || "เกิดข้อผิดพลาด"}`);
 }
 

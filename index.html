@@ -8,21 +8,28 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Itim&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="summary-report.css">
 </head>
 <body>
   <div id="loadingOverlay" class="loading-overlay hidden">
     <div class="spinner"></div>
-    <p>กำลังโหลดข้อมูล...</p>
+    <p>🌸 Sensei กำลังเตรียมข้อมูลให้นะ...</p>
   </div>
 
   <section id="loginView" class="login-view">
-    <div class="login-panel">
-      <div class="login-hero">
-        <span class="hero-badge">Classroom Admin</span>
-        <h1>ระบบธุรการชั้นเรียน</h1>
-        <p>ดูแลข้อมูล ป.4 - ป.6 ให้เป็นระเบียบในที่เดียว 💜</p>
+    <div class="login-panel login-hero-layout">
+      <div class="login-hero login-hero-copy">
+        <span class="hero-badge">Nongpheung 4 - 6 Classroom</span>
+        <h1>ระบบธุรการชั้นเรียนยุคใหม่สำหรับโรงเรียนชุมชนบ้านหนองผึ้ง</h1>
+        <p>ผู้ช่วยครูประจำชั้น ป.4 - ป.6 สำหรับเช็กชื่อ ดูแลสุขภาพ ติดตามพฤติกรรม และสรุปรายงานประจำวันในหน้าเดียว 🌸</p>
+        <div class="login-hero-points">
+          <span>✅ Dashboard เห็นงานวันนี้ทันที</span>
+          <span>🥛 บันทึกดื่มนม / แปรงฟันง่าย</span>
+          <span>📊 รายงานพร้อมพิมพ์สำหรับครู</span>
+        </div>
       </div>
       <form id="adminLoginForm" class="login-card">
+        <span class="login-card-kicker">Teacher Login</span>
         <h2>เข้าสู่ระบบครู</h2>
         <label>
           ชื่อผู้ใช้ / อีเมล Admin
@@ -32,8 +39,10 @@
           รหัสผ่าน
           <input id="adminPassword" type="password" placeholder="กรอกรหัสผ่าน" autocomplete="current-password">
         </label>
-        <button type="submit" class="primary-btn">เข้าสู่ระบบ Admin</button>
-        <button type="button" id="anonymousLoginBtn" class="ghost-btn">เข้าใช้งานครูทั่วไป</button>
+        <div class="login-action-grid">
+          <button type="submit" class="login-admin-btn">เข้าสู่ระบบ Admin</button>
+          <button type="button" id="anonymousLoginBtn" class="login-teacher-btn">เข้าใช้งานครูทั่วไป</button>
+        </div>
       </form>
     </div>
   </section>
@@ -44,7 +53,7 @@
         <div class="brand-logo">📚</div>
         <div>
           <h1>ระบบธุรการชั้นเรียน</h1>
-          <p id="schoolNameSide">โรงเรียนของเรา</p>
+          <p id="schoolNameSide">โรงเรียนชุมชนบ้านหนองผึ้ง</p>
         </div>
       </div>
       <nav id="menuList" class="menu-list" aria-label="เมนูหลัก"></nav>
@@ -88,5 +97,6 @@
 
   <script src="firebase-config.js"></script>
   <script src="app.js"></script>
+  <script src="summary-report.js"></script>
 </body>
 </html>
