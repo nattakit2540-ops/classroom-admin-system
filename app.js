@@ -21,6 +21,16 @@ let serverTimestamp;
 const adminEmails = ["stampnattaki17@gmail.com"];
 
 const classLevels = ["ป.4", "ป.5", "ป.6"];
+const localStorageKey = "sakura-sensei-classroom-v1";
+const localStateCollections = [
+  "students",
+  "attendance",
+  "milkRecords",
+  "toothbrushRecords",
+  "healthRecords",
+  "behaviorRecords",
+  "schedules"
+];
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const schedulePeriods = [
   { period: 1, time: "09.00-10.00", label: "คาบที่ 1" },
@@ -86,6 +96,39 @@ const demoStudents = [
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
+function loadLocalState() {
+  try {
+    const raw = localStorage.getItem(localStorageKey);
+    if (!raw) {
+      state.students = demoStudents.map((student) => ({ ...student }));
+      return;
+    }
+
+    const saved = JSON.parse(raw);
+    localStateCollections.forEach((name) => {
+      if (Array.isArray(saved[name])) state[name] = saved[name];
+    });
+    state.settings = { ...state.settings, ...(saved.settings || {}) };
+    if (!state.students.length) state.students = demoStudents.map((student) => ({ ...student }));
+  } catch (error) {
+    console.warn("Local demo data could not be loaded", error);
+    state.students = demoStudents.map((student) => ({ ...student }));
+  }
+}
+
+function persistLocalState() {
+  if (state.firebaseReady) return;
+  try {
+    const snapshot = localStateCollections.reduce((data, name) => {
+      data[name] = state[name];
+      return data;
+    }, { settings: state.settings });
+    localStorage.setItem(localStorageKey, JSON.stringify(snapshot));
+  } catch (error) {
+    console.warn("Local demo data could not be saved", error);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   bindGlobalEvents();
   renderMenu();
@@ -109,7 +152,7 @@ function bindGlobalEvents() {
 
 async function initFirebase() {
   if (!isFirebaseConfigured()) {
-    state.students = demoStudents;
+    loadLocalState();
     state.firebaseReady = false;
     showToast("เปิดโหมดทดลอง ใส่ firebaseConfig เพื่อใช้ฐานข้อมูลจริง ✅");
     showApp();
@@ -136,7 +179,8 @@ async function initFirebase() {
     });
   } catch (error) {
     console.error(error);
-    state.students = demoStudents;
+    loadLocalState();
+    state.firebaseReady = false;
     showToast("เชื่อม Firebase ไม่สำเร็จ ใช้โหมดทดลองชั่วคราว");
     showApp();
   }
@@ -178,7 +222,7 @@ async function loginAnonymous() {
     } catch (error) {
       if (error.code === "auth/configuration-not-found" || error.code === "auth/admin-restricted-operation") {
         state.firebaseReady = false;
-        state.students = demoStudents;
+        loadLocalState();
         state.user = { uid: "local-teacher", isAnonymous: true };
         showApp();
         showToast("Firebase Anonymous ยังไม่ได้เปิด ใช้โหมดทดลองชั่วคราว ✅");
@@ -277,7 +321,7 @@ async function loadCollection(name) {
 
 async function loadStudents(classLevel = state.classLevel) {
   if (!state.firebaseReady) {
-    state.students = demoStudents;
+    if (!state.students.length) loadLocalState();
     return filterByClass(state.students, classLevel);
   }
   try {
@@ -400,6 +444,8 @@ function loadDashboard() {
   const topGoodStudent = getTopBehaviorStudent(goodToday, true);
   const watchStudent = getTopBehaviorStudent(disciplineToday, false);
   const recent = getRecentActivities();
+  const dashboardTasks = dashboardBuildTasks({ todayAttendance, milkToday, brushToday, todayBehavior });
+  const dashboardAlerts = dashboardBuildAlerts({ students, todayAttendance, milkToday, brushToday, absent, late, total, bmiSummary });
 
   $("#mainContent").innerHTML = `
     <section class="dashboard-page">
@@ -442,6 +488,12 @@ function loadDashboard() {
           <p>${context.message}</p>
           <button class="primary-btn" data-dashboard-link="${context.page}">${context.button}</button>
         </article>
+
+        ${dashboardRenderQuickActions()}
+        ${dashboardRenderTasks(dashboardTasks)}
+        ${dashboardRenderAlerts(dashboardAlerts)}
+        ${dashboardRenderStudentProfiles(students)}
+        ${dashboardRenderPrintTools()}
 
         ${dashboardMetricCard("👧", "นักเรียนทั้งหมด", total, "คน", "พร้อมดูแลวันนี้", "soft")}
         ${dashboardMetricCard("✅", "มาเรียนวันนี้", present, "คน", `${presentPercent}% ของห้อง`, "success")}
@@ -521,6 +573,7 @@ function loadDashboard() {
           </div>
         </article>
       </div>
+      ${dashboardRenderProfileModal()}
     </section>
   `;
 
@@ -541,6 +594,291 @@ function dashboardMetricCard(icon, label, value, unit, hint, tone) {
       </div>
     </article>
   `;
+}
+
+function dashboardBuildTasks({ milkToday, brushToday, todayBehavior }) {
+  const dailyDone = state.attendance.some((item) => item.date === todayISO() && item.type === "daily");
+  const subjectDone = state.attendance.some((item) => item.date === todayISO() && item.type === "subject");
+  return [
+    { label: "เช็กชื่อโฮมรูม", done: dailyDone, urgent: !dailyDone, page: "daily" },
+    { label: "เช็กชื่อเข้าเรียน", done: subjectDone, urgent: false, page: "subject" },
+    { label: "บันทึกดื่มนม", done: milkToday.length > 0, urgent: milkToday.length === 0, page: "milk" },
+    { label: "บันทึกแปรงฟัน", done: brushToday.length > 0, urgent: brushToday.length === 0, page: "toothbrush" },
+    { label: "บันทึกพฤติกรรม", done: todayBehavior.length > 0, urgent: false, page: "behavior" }
+  ];
+}
+
+function dashboardRenderTasks(tasks) {
+  return `
+    <article class="dashboard-card dashboard-task-card dashboard-span-4">
+      <div class="dashboard-card-head">
+        <div>
+          <span>Today Task Checklist</span>
+          <h3>งานประจำวันที่ Sensei ต้องทำ</h3>
+        </div>
+        <strong>${tasks.filter((task) => task.done).length}/${tasks.length}</strong>
+      </div>
+      <div class="dashboard-task-list">
+        ${tasks.map((task) => `
+          <button type="button" class="dashboard-task-item ${task.done ? "dashboard-task-done" : ""} ${task.urgent && !task.done ? "dashboard-task-urgent" : ""}" data-dashboard-link="${task.page}">
+            <span>${task.done ? "✓" : task.urgent ? "!" : "•"}</span>
+            <strong>${task.label}</strong>
+            <em>${task.done ? "เสร็จแล้ว" : task.urgent ? "ด่วน" : "ยังไม่เสร็จ"}</em>
+          </button>
+        `).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function dashboardBuildAlerts({ students, milkToday, brushToday, absent, late, total, bmiSummary }) {
+  const alerts = [];
+  const repeatedLate = dashboardRepeatedLateStudents(students);
+  const bmiWatch = bmiSummary.thin + bmiSummary.overweight + bmiSummary.obese;
+
+  if (total && absent > Math.max(1, Math.ceil(total * 0.2))) {
+    alerts.push({ tone: "danger", icon: "⚠️", title: "นักเรียนขาดมากกว่าปกติ", message: `วันนี้ขาด ${absent} จาก ${total} คน ควรตรวจสอบผู้ปกครอง`, page: "reports" });
+  }
+  if (late > 0 || repeatedLate.length) {
+    alerts.push({ tone: "warning", icon: "🟡", title: "นักเรียนมาสายซ้ำ", message: repeatedLate.length ? `${repeatedLate.slice(0, 2).map(fullName).join(", ")} ควรติดตามเวลาเข้าเรียน` : `วันนี้มีมาสาย ${late} คน`, page: "daily" });
+  }
+  if (total && milkToday.length === 0) {
+    alerts.push({ tone: "sky", icon: "🥛", title: "ยังไม่ได้บันทึกดื่มนม", message: "เปิดเมนูดื่มนมเพื่อบันทึกสุขนิสัยประจำวัน", page: "milk" });
+  }
+  if (total && brushToday.length === 0) {
+    alerts.push({ tone: "mint", icon: "🪥", title: "ยังไม่ได้บันทึกแปรงฟัน", message: "บันทึกหลังอาหารกลางวันเพื่อสรุปงานประจำชั้น", page: "toothbrush" });
+  }
+  if (bmiWatch > 0) {
+    alerts.push({ tone: "pink", icon: "💪", title: "มีนักเรียน BMI ที่ควรติดตาม", message: `${bmiWatch} คนอยู่ในกลุ่มที่ควรดูแลต่อเนื่อง`, page: "health" });
+  }
+
+  return alerts.length ? alerts : [
+    { tone: "success", icon: "🌸", title: "วันนี้ภาพรวมเรียบร้อยดี", message: "Dashboard ยังไม่พบสัญญาณเร่งด่วน", page: "reports" }
+  ];
+}
+
+function dashboardRenderAlerts(alerts) {
+  return `
+    <article class="dashboard-card dashboard-alert-card dashboard-span-4">
+      <div class="dashboard-card-head">
+        <div>
+          <span>Smart Alert</span>
+          <h3>แจ้งเตือนตามบริบทห้องเรียน</h3>
+        </div>
+      </div>
+      <div class="dashboard-alert-list">
+        ${alerts.slice(0, 4).map((alert) => `
+          <button type="button" class="dashboard-alert-item dashboard-alert-${alert.tone}" data-dashboard-link="${alert.page}">
+            <span>${alert.icon}</span>
+            <div>
+              <strong>${alert.title}</strong>
+              <p>${alert.message}</p>
+            </div>
+          </button>
+        `).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function dashboardRenderQuickActions() {
+  const actions = [
+    ["เช็กชื่อวันนี้", "daily", "🏫"],
+    ["บันทึกดื่มนม", "milk", "🥛"],
+    ["บันทึกแปรงฟัน", "toothbrush", "🪥"],
+    ["เพิ่มพฤติกรรม", "behavior", "🌟"],
+    ["เพิ่มนักเรียน", "students", "👧"]
+  ];
+  return `
+    <article class="dashboard-card dashboard-action-card dashboard-span-4">
+      <div class="dashboard-card-head">
+        <div>
+          <span>Quick Action</span>
+          <h3>ปุ่มลัดงานประจำวัน</h3>
+        </div>
+      </div>
+      <div class="dashboard-action-grid">
+        ${actions.map(([label, page, icon]) => `<button type="button" class="dashboard-action-button" data-dashboard-link="${page}"><span>${icon}</span>${label}</button>`).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function dashboardRenderPrintTools() {
+  return `
+    <article class="dashboard-card dashboard-print-card dashboard-span-4">
+      <div class="dashboard-card-head">
+        <div>
+          <span>One-Click Print Report</span>
+          <h3>พิมพ์รายงานจาก Dashboard</h3>
+        </div>
+      </div>
+      <div class="dashboard-print-actions">
+        <button type="button" class="dashboard-print-button" data-dashboard-print="today">รายงานวันนี้</button>
+        <button type="button" class="dashboard-print-button" data-dashboard-print="month">รายงานรายเดือน</button>
+        <button type="button" class="dashboard-print-button" data-dashboard-print="student">รายงานนักเรียนรายคน</button>
+      </div>
+    </article>
+  `;
+}
+
+function dashboardRenderStudentProfiles(students) {
+  const visibleStudents = students.slice(0, 8);
+  return `
+    <article class="dashboard-card dashboard-student-card dashboard-span-4">
+      <div class="dashboard-card-head">
+        <div>
+          <span>Student Profile</span>
+          <h3>คลิกชื่อนักเรียนเพื่อดูข้อมูลรวม</h3>
+        </div>
+      </div>
+      <div class="dashboard-student-list">
+        ${visibleStudents.map((student) => `
+          <button type="button" class="dashboard-student-button" data-dashboard-student="${student.id}">
+            <span>${student.gender === "หญิง" ? "👧" : "👦"}</span>
+            <div>
+              <strong>${fullName(student)}</strong>
+              <small>เลขที่ ${student.studentNo || "-"} • ${student.classLevel || "-"}</small>
+            </div>
+          </button>
+        `).join("") || `<p class="dashboard-empty">ยังไม่มีรายชื่อนักเรียน</p>`}
+      </div>
+    </article>
+  `;
+}
+
+function dashboardRenderProfileModal() {
+  return `
+    <div id="dashboardProfileModal" class="dashboard-profile-modal hidden" role="dialog" aria-modal="true" aria-labelledby="dashboardProfileTitle">
+      <div class="dashboard-profile-panel">
+        <button type="button" class="dashboard-profile-close" aria-label="ปิดข้อมูลนักเรียน">×</button>
+        <div id="dashboardProfileContent"></div>
+      </div>
+    </div>
+  `;
+}
+
+function dashboardOpenStudentProfile(studentId) {
+  const student = state.students.find((item) => item.id === studentId);
+  if (!student) return;
+  const summary = dashboardStudentSummary(student);
+  $("#dashboardProfileContent").innerHTML = `
+    <div class="dashboard-profile-head">
+      <span>${student.gender === "หญิง" ? "👧" : "👦"}</span>
+      <div>
+        <p>${student.classLevel || "-"} • เลขที่ ${student.studentNo || "-"}</p>
+        <h3 id="dashboardProfileTitle">${fullName(student)}</h3>
+        <small>${student.studentCode || "ยังไม่มีรหัสนักเรียน"}</small>
+      </div>
+    </div>
+    <div class="dashboard-profile-grid">
+      ${dashboardProfileStat("การมาเรียน", summary.attendance)}
+      ${dashboardProfileStat("ดื่มนม", summary.milk)}
+      ${dashboardProfileStat("แปรงฟัน", summary.brush)}
+      ${dashboardProfileStat("BMI ล่าสุด", summary.bmi)}
+      ${dashboardProfileStat("อายุ", student.birthDate ? calculateAge(student.birthDate) : "-")}
+      ${dashboardProfileStat("พฤติกรรมดี", `${summary.good} รายการ`)}
+      ${dashboardProfileStat("ผิดระเบียบ", `${summary.discipline} รายการ`)}
+      ${dashboardProfileStat("เบอร์ผู้ปกครอง", student.parentPhone || "-")}
+    </div>
+    <div class="dashboard-profile-note">
+      <strong>ข้อมูลพื้นฐาน</strong>
+      <p>ชื่อเล่น ${student.nickname || "-"} • สถานะ ${student.status || "-"} • ที่อยู่ ${student.address || "-"}</p>
+    </div>
+  `;
+  $("#dashboardProfileModal").classList.remove("hidden");
+}
+
+function dashboardProfileStat(label, value) {
+  return `<div class="dashboard-profile-stat"><span>${label}</span><strong>${value || "-"}</strong></div>`;
+}
+
+function dashboardCloseStudentProfile() {
+  $("#dashboardProfileModal")?.classList.add("hidden");
+}
+
+function dashboardStudentSummary(student) {
+  const attendanceRecords = state.attendance
+    .flatMap((item) => (item.records || []).map((record) => ({ ...record, date: item.date, type: item.type })))
+    .filter((record) => record.studentId === student.id);
+  const todayAttend = attendanceRecords.find((record) => record.date === todayISO()) || attendanceRecords.at(-1);
+  const milk = dashboardRecordStatus(state.milkRecords, student.id);
+  const brush = dashboardRecordStatus(state.toothbrushRecords, student.id);
+  const health = state.healthRecords
+    .filter((item) => item.studentId === student.id)
+    .sort((a, b) => String(b.recordDate || b.createdAt || "").localeCompare(String(a.recordDate || a.createdAt || "")))[0];
+  const bmi = health?.bmi || calculateBMI(student.weight, student.height);
+  const behaviors = state.behaviorRecords.filter((item) => item.studentId === student.id);
+  return {
+    attendance: todayAttend?.status || "รอข้อมูล",
+    milk,
+    brush,
+    bmi: bmi ? `${bmi} • ${getBMICategory(bmi)}` : "รอข้อมูล",
+    good: behaviors.filter((item) => item.behaviorType === "good").length,
+    discipline: behaviors.filter((item) => item.behaviorType === "discipline").length
+  };
+}
+
+function dashboardRecordStatus(collectionItems, studentId) {
+  const record = collectionItems
+    .filter((item) => item.date === todayISO())
+    .flatMap((item) => item.records || [])
+    .find((item) => item.studentId === studentId);
+  return record?.status || "รอข้อมูล";
+}
+
+function dashboardRepeatedLateStudents(students) {
+  const month = todayISO().slice(0, 7);
+  return students.filter((student) => {
+    const lateCount = state.attendance
+      .filter((item) => String(item.date || "").startsWith(month))
+      .flatMap((item) => item.records || [])
+      .filter((record) => record.studentId === student.id && record.status === "มาสาย")
+      .length;
+    return lateCount >= 2;
+  });
+}
+
+function dashboardPrintReport(type) {
+  const students = filterByClass(state.students, state.classLevel);
+  const titleMap = {
+    today: "รายงานวันนี้",
+    month: "รายงานรายเดือน",
+    student: "รายงานนักเรียนรายคน"
+  };
+  const rows = students.map((student) => {
+    const summary = dashboardStudentSummary(student);
+    return `
+      <tr>
+        <td>${student.studentNo || "-"}</td>
+        <td>${fullName(student)}</td>
+        <td>${student.classLevel || "-"}</td>
+        <td>${summary.attendance}</td>
+        <td>${summary.milk}</td>
+        <td>${summary.brush}</td>
+        <td>${summary.bmi}</td>
+        <td>${summary.good}/${summary.discipline}</td>
+      </tr>
+    `;
+  }).join("");
+  const sheet = document.createElement("section");
+  sheet.className = "dashboard-print-sheet";
+  sheet.innerHTML = `
+    <h1>Nongpeung 4 - 6 Classroom</h1>
+    <h2>${titleMap[type] || titleMap.today} • ${state.classLevel === "all" ? "รวมทั้งหมด" : state.classLevel}</h2>
+    <p>วันที่ ${new Intl.DateTimeFormat("th-TH", { dateStyle: "full" }).format(new Date())} • ครู ${state.settings.teacherName}</p>
+    <table>
+      <thead><tr><th>เลขที่</th><th>ชื่อ</th><th>ชั้น</th><th>มาเรียน</th><th>นม</th><th>แปรงฟัน</th><th>BMI</th><th>ดี/ผิด</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+  document.body.classList.add("dashboard-printing");
+  document.body.appendChild(sheet);
+  window.print();
+  setTimeout(() => {
+    sheet.remove();
+    document.body.classList.remove("dashboard-printing");
+  }, 300);
 }
 
 function percent(value, total) {
@@ -692,6 +1030,16 @@ function bindDashboardActions() {
     const found = state.students.find((student) => fullName(student).toLowerCase().includes(queryText));
     if (found) showToast(`พบข้อมูล ${fullName(found)} อยู่ชั้น ${found.classLevel}`);
   });
+  $$("[data-dashboard-student]").forEach((button) => {
+    button.addEventListener("click", () => dashboardOpenStudentProfile(button.dataset.dashboardStudent));
+  });
+  $$("[data-dashboard-print]").forEach((button) => {
+    button.addEventListener("click", () => dashboardPrintReport(button.dataset.dashboardPrint));
+  });
+  $(".dashboard-profile-close")?.addEventListener("click", dashboardCloseStudentProfile);
+  $("#dashboardProfileModal")?.addEventListener("click", (event) => {
+    if (event.target.id === "dashboardProfileModal") dashboardCloseStudentProfile();
+  });
 }
 
 function renderAttendancePage(type) {
@@ -749,7 +1097,10 @@ async function saveAttendance(type = "daily") {
     updatedAt: nowValue()
   };
   const saved = await saveToFirestore("attendance", payload, "บันทึกเรียบร้อยแล้ว Sensei! 🌸✅");
-  if (saved) state.attendance.push({ id: crypto.randomUUID(), ...payload });
+  if (saved) {
+    state.attendance.push({ id: saved, ...payload });
+    persistLocalState();
+  }
 }
 
 function loadAttendanceReport() {
@@ -924,13 +1275,19 @@ function bmiClass(category) {
 async function saveMilkRecord() {
   const payload = dailyPayload();
   const saved = await saveToFirestore("milkRecords", payload, "บันทึกเรียบร้อยแล้ว Sensei! 🌸✅");
-  if (saved) state.milkRecords.push({ id: crypto.randomUUID(), ...payload });
+  if (saved) {
+    state.milkRecords.push({ id: saved, ...payload });
+    persistLocalState();
+  }
 }
 
 async function saveToothbrushRecord() {
   const payload = dailyPayload();
   const saved = await saveToFirestore("toothbrushRecords", payload, "บันทึกเรียบร้อยแล้ว Sensei! 🌸✅");
-  if (saved) state.toothbrushRecords.push({ id: crypto.randomUUID(), ...payload });
+  if (saved) {
+    state.toothbrushRecords.push({ id: saved, ...payload });
+    persistLocalState();
+  }
 }
 
 function dailyPayload() {
@@ -1010,7 +1367,21 @@ async function saveHealthRecord() {
     createdAt: nowValue()
   };
   const saved = await saveToFirestore("healthRecords", payload, "บันทึกสุขภาพสำเร็จแล้ว 💜");
-  if (saved) state.healthRecords.push({ id: crypto.randomUUID(), ...payload });
+  if (saved) {
+    state.healthRecords.push({ id: saved, ...payload });
+    if (!state.firebaseReady) {
+      state.students = state.students.map((student) => student.id === studentId
+        ? {
+            ...student,
+            weight: weight || student.weight,
+            height: height || student.height,
+            birthDate: payload.birthDate || student.birthDate
+          }
+        : student);
+    }
+    persistLocalState();
+    renderHealth();
+  }
 }
 
 function calculateBMI(weight, height) {
@@ -1104,7 +1475,10 @@ async function saveBehaviorRecord() {
     createdAt: nowValue()
   };
   const saved = await saveToFirestore("behaviorRecords", payload, "บันทึกพฤติกรรมสำเร็จแล้ว 🌟");
-  if (saved) state.behaviorRecords.push({ id: crypto.randomUUID(), ...payload });
+  if (saved) {
+    state.behaviorRecords.push({ id: saved, ...payload });
+    persistLocalState();
+  }
   renderBehavior();
 }
 
@@ -1199,6 +1573,7 @@ async function saveSchedule() {
     }
   }
   state.schedules = [...state.schedules.filter((item) => item.classLevel !== selectedClass()), ...rows.map((row) => ({ id: crypto.randomUUID(), ...row }))];
+  persistLocalState();
   showToast("บันทึกตารางเรียนสำเร็จแล้ว ✅");
   playSuccessSound();
 }
@@ -1749,6 +2124,7 @@ async function addStudent() {
       if (state.firebaseReady) await setDoc(doc(state.db, "students", state.editingStudentId), updated, { merge: true });
       state.students = state.students.map((item) => item.id === state.editingStudentId ? { id: item.id, ...updated } : item);
       state.editingStudentId = null;
+      persistLocalState();
       showToast("แก้ไขข้อมูลนักเรียนสำเร็จแล้ว ✅");
       playSuccessSound();
       renderStudents();
@@ -1767,6 +2143,7 @@ async function addStudent() {
   const saved = await saveToFirestore("students", payload, "เพิ่มนักเรียนสำเร็จแล้ว ✅");
   if (saved) {
     state.students.push({ id: saved, ...payload });
+    persistLocalState();
     renderStudents();
   }
 }
@@ -1821,6 +2198,7 @@ async function importStudentsFromCSV(event) {
       }
     }
     state.students.push(...students.map((student) => ({ id: crypto.randomUUID(), ...student })));
+    persistLocalState();
     showToast(`นำเข้านักเรียน ${students.length} คนสำเร็จแล้ว ✅`);
     playSuccessSound();
     renderStudents();
@@ -1968,6 +2346,7 @@ async function deleteStudent(id) {
   }
   if (state.firebaseReady) await deleteDoc(doc(state.db, "students", id));
   state.students = state.students.filter((student) => student.id !== id);
+  persistLocalState();
   showToast("ลบข้อมูลนักเรียนแล้ว");
   renderStudentTable();
 }
@@ -1986,11 +2365,15 @@ function renderSettings() {
       <div class="form-actions">
         <button id="saveSettingsBtn" class="primary-btn">บันทึกตั้งค่า</button>
         <button id="toggleDarkSettingsBtn" class="soft-btn">Dark Mode / Light Mode</button>
+        <button id="exportLocalBackupBtn" type="button" class="ghost-btn">สำรองข้อมูลทดลอง</button>
+        <button id="resetLocalDemoBtn" type="button" class="danger-btn">รีเซ็ตข้อมูลทดลอง</button>
       </div>
     </div>
   `;
   $("#saveSettingsBtn").addEventListener("click", saveSettings);
   $("#toggleDarkSettingsBtn").addEventListener("click", toggleDarkMode);
+  $("#exportLocalBackupBtn").addEventListener("click", exportLocalBackup);
+  $("#resetLocalDemoBtn").addEventListener("click", resetLocalDemoData);
 }
 
 async function saveSettings() {
@@ -2004,8 +2387,49 @@ async function saveSettings() {
   };
   $("#schoolNameSide").textContent = state.settings.schoolName;
   if (state.firebaseReady) await setDoc(doc(state.db, "settings", "main"), state.settings, { merge: true });
+  persistLocalState();
   showToast("บันทึกตั้งค่าระบบสำเร็จแล้ว ✅");
   playSuccessSound();
+}
+
+function exportLocalBackup() {
+  if (state.firebaseReady) {
+    showToast("สำรองข้อมูลทดลองใช้ได้ในโหมดทดลองเท่านั้น");
+    return;
+  }
+  const snapshot = localStateCollections.reduce((data, name) => {
+    data[name] = state[name];
+    return data;
+  }, { settings: state.settings, exportedAt: new Date().toISOString() });
+  downloadTextFile(`classroom-backup-${todayISO()}.json`, JSON.stringify(snapshot, null, 2), "application/json;charset=utf-8");
+  showToast("สำรองข้อมูลทดลองเรียบร้อยแล้ว Sensei! 🌸✅");
+}
+
+async function resetLocalDemoData() {
+  if (state.firebaseReady) {
+    showToast("รีเซ็ตข้อมูลทดลองใช้ได้ในโหมดทดลองเท่านั้น");
+    return;
+  }
+  const ok = await confirmAction("รีเซ็ตข้อมูลทดลอง", "ต้องการล้างข้อมูลทดลองในเครื่องนี้และกลับไปใช้ข้อมูลตัวอย่างใช่ไหม?");
+  if (!ok) return;
+
+  localStorage.removeItem(localStorageKey);
+  localStateCollections.forEach((name) => {
+    state[name] = [];
+  });
+  state.students = demoStudents.map((student) => ({ ...student }));
+  state.settings = {
+    schoolName: "โรงเรียนของเรา",
+    academicYear: "2569",
+    semester: "1",
+    teacherName: "ครูประจำชั้น",
+    theme: "purple",
+    darkMode: state.settings.darkMode
+  };
+  persistLocalState();
+  $("#schoolNameSide").textContent = state.settings.schoolName;
+  showToast("รีเซ็ตข้อมูลทดลองแล้ว Sensei! 🌸✅");
+  renderActivePage();
 }
 
 async function saveToFirestore(collectionName, payload, message) {
