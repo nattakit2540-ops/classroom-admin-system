@@ -1812,7 +1812,7 @@ function renderReports(kind = "all") {
   ];
   const visibleReportTypes = reportTypes;
   $("#mainContent").innerHTML = `
-    ${sectionHeader("ระบบรายงาน", "กรองข้อมูล พิมพ์รายงาน และ Export CSV")}
+    ${sectionHeader("ระบบรายงาน", "กรองข้อมูล สร้างตารางสรุปราชการ พิมพ์รายงาน และ Export PDF / CSV")}
     <div class="toolbar">
       <input id="reportDate" type="date" value="${todayISO()}">
       <select id="pageClassSelect">${classLevels.map((level) => `<option value="${level}" ${level === selectedClass() ? "selected" : ""}>${level}</option>`).join("")}</select>
@@ -2841,10 +2841,18 @@ function exportCSV() {
 }
 
 function printReport() {
+  if (typeof summaryReportPrint === "function" && document.getElementById("summary-report-section")) {
+    summaryReportPrint();
+    return;
+  }
   exportPDF();
 }
 
 function exportPDF() {
+  if (typeof summaryReportExportPDF === "function" && document.getElementById("summary-report-section")) {
+    summaryReportExportPDF();
+    return;
+  }
   const report = buildCurrentReport();
   const html = buildPrintableReportHTML(report);
   const printWindow = window.open("", "_blank", "width=1200,height=800");

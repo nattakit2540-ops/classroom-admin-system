@@ -31,7 +31,7 @@ function summaryReportMount() {
       <label for="summary-report-mode-select">รูปแบบรายงาน:</label>
       <select id="summary-report-mode-select">
         <option value="list">รายชื่อรายบุคคล</option>
-        <option value="summary_daily">ตารางสรุปผลรวมรายวัน</option>
+        <option value="summary_daily" selected>ตารางสรุปผลรวมรายวัน</option>
         <option value="summary_monthly">ตารางสรุปรายเดือน</option>
         <option value="summary_signed">รายงานพร้อมช่องลงชื่อ</option>
       </select>
@@ -49,6 +49,8 @@ function summaryReportMount() {
   summaryReportBindControls(section);
   summaryReportRenderControls();
   summaryReportEnsureOverlay();
+  summaryReportInit();
+  window.setTimeout(summaryReportGenerate, 0);
 }
 
 function summaryReportRenderShell() {
@@ -102,6 +104,7 @@ function summaryReportRenderShell() {
       <div class="summary-report-actions summary-report-screen-only">
         <button type="button" class="summary-report-btn summary-report-btn--primary" data-summary-report-action="generate">สร้างตารางสรุป</button>
         <button type="button" class="summary-report-btn" data-summary-report-action="print">พิมพ์ตารางสรุป</button>
+        <button type="button" class="summary-report-btn" data-summary-report-action="pdf">Export PDF</button>
         <button type="button" class="summary-report-btn" data-summary-report-action="csv">Export CSV</button>
         <button type="button" class="summary-report-btn" data-summary-report-action="copy">คัดลอกตาราง</button>
         <button type="button" class="summary-report-btn" data-summary-report-action="reload">โหลดข้อมูลใหม่</button>
@@ -118,6 +121,7 @@ function summaryReportBindControls(section) {
   section.querySelector("[data-summary-report-action='generate']")?.addEventListener("click", summaryReportGenerate);
   section.querySelector("[data-summary-report-action='reload']")?.addEventListener("click", summaryReportGenerate);
   section.querySelector("[data-summary-report-action='print']")?.addEventListener("click", summaryReportPrint);
+  section.querySelector("[data-summary-report-action='pdf']")?.addEventListener("click", summaryReportExportPDF);
   section.querySelector("[data-summary-report-action='csv']")?.addEventListener("click", summaryReportExportCSV);
   section.querySelector("[data-summary-report-action='copy']")?.addEventListener("click", summaryReportCopyTable);
 }
@@ -619,6 +623,104 @@ function summaryReportPrintClosePreview() {
   if (overlay) overlay.style.display = "none";
 }
 
+function summaryReportRenderPDFPreview() {
+  if (!summaryReportCurrentRows.length) return null;
+  const type = document.getElementById("summary-report-type")?.value || "";
+  const date = document.getElementById("summary-report-date")?.value || "";
+  const month = document.getElementById("summary-report-month")?.value || "";
+  const year = document.getElementById("summary-report-year")?.value || "";
+  const term = document.getElementById("summary-report-term")?.value || "";
+  const period = type === "attendance_monthly" ? month : type === "bmi" ? "" : date;
+  let preview = document.getElementById("summary-report-pdf-preview");
+  if (!preview) {
+    preview = document.createElement("div");
+    preview.id = "summary-report-pdf-preview";
+    preview.className = "summary-report-pdf-preview";
+    document.body.appendChild(preview);
+  }
+  preview.innerHTML = `
+    <div class="summary-report-print-area">
+      ${summaryReportPrintRenderHeader(summaryReportCurrentTitle, summaryReportCurrentClassLabel, period, year, term)}
+      ${summaryReportPrintRenderTable(summaryReportCurrentCols, summaryReportCurrentRows, summaryReportCurrentTotals)}
+      ${summaryReportPrintRenderSignature()}
+    </div>
+  `;
+  return preview.querySelector(".summary-report-print-area");
+}
+
+function summaryReportGetPDFFileName() {
+  const type = document.getElementById("summary-report-type")?.value || "report";
+  const classLevel = document.getElementById("summary-report-class")?.value || "all";
+  const date = document.getElementById("summary-report-date")?.value || new Date().toISOString().slice(0, 10);
+  const month = document.getElementById("summary-report-month")?.value || date.slice(0, 7);
+  const period = type.includes("monthly") ? month : date;
+  const typeLabel = (summaryReportCurrentTitle || `รายงาน_${type}`).replace(/\s+/g, "_");
+  const classLabel = classLevel === "all" ? "ทุกชั้น" : classLevel.replace(".", "");
+  return `${typeLabel}_${classLabel}_${period}.pdf`;
+}
+
+async function summaryReportExportPDF() {
+  if (!summaryReportCurrentRows.length) {
+    summaryReportShowToast("กรุณาสร้างรายงานก่อนส่งออก PDF", "error");
+    return;
+  }
+  if (typeof html2canvas !== "function" || !window.jspdf?.jsPDF) {
+    summaryReportShowToast("ยังโหลดเครื่องมือ PDF ไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่", "error");
+    return;
+  }
+
+  const printArea = summaryReportRenderPDFPreview();
+  const text = (printArea?.innerText || printArea?.textContent || "").trim();
+  if (!printArea || !text) {
+    summaryReportShowToast("กรุณาสร้างรายงานก่อนส่งออก PDF", "error");
+    return;
+  }
+
+  try {
+    summaryReportShowToast("กำลังสร้างไฟล์ PDF...");
+    const canvas = await html2canvas(printArea, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "#ffffff"
+    });
+    const imgData = canvas.toDataURL("image/png");
+    const { jsPDF } = window.jspdf;
+    const reportType = document.getElementById("summary-report-type")?.value || "";
+    const isMonthly = reportType.includes("monthly");
+    const pdf = new jsPDF({
+      orientation: isMonthly ? "landscape" : "portrait",
+      unit: "mm",
+      format: "a4"
+    });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth - 20;
+    const imgHeight = canvas.height * imgWidth / canvas.width;
+    const pageContentHeight = pageHeight - 20;
+
+    if (imgHeight <= pageContentHeight) {
+      pdf.addImage(imgData, "PNG", 10, 10, imgWidth, imgHeight);
+    } else {
+      let heightLeft = imgHeight;
+      let y = 10;
+      pdf.addImage(imgData, "PNG", 10, y, imgWidth, imgHeight);
+      heightLeft -= pageContentHeight;
+      while (heightLeft > 0) {
+        pdf.addPage();
+        y = heightLeft - imgHeight + 10;
+        pdf.addImage(imgData, "PNG", 10, y, imgWidth, imgHeight);
+        heightLeft -= pageContentHeight;
+      }
+    }
+
+    pdf.save(summaryReportGetPDFFileName());
+    summaryReportShowToast("ส่งออก PDF สำเร็จ");
+  } catch (error) {
+    console.error("[summaryReportExportPDF]", error);
+    summaryReportShowToast("ไม่สามารถส่งออก PDF ได้ กรุณาลองใหม่", "error");
+  }
+}
+
 function summaryReportExportCSV() {
   if (!summaryReportCurrentRows.length) {
     summaryReportShowToast("กรุณาสร้างตารางสรุปก่อน Export", "error");
@@ -699,5 +801,8 @@ window.summaryReportPrintFormatThaiDate = summaryReportPrintFormatThaiDate;
 window.summaryReportPrintRenderHeader = summaryReportPrintRenderHeader;
 window.summaryReportPrintRenderTable = summaryReportPrintRenderTable;
 window.summaryReportPrintRenderSignature = summaryReportPrintRenderSignature;
+window.summaryReportRenderPDFPreview = summaryReportRenderPDFPreview;
+window.summaryReportGetPDFFileName = summaryReportGetPDFFileName;
+window.summaryReportExportPDF = summaryReportExportPDF;
 window.summaryReportExportCSV = summaryReportExportCSV;
 window.summaryReportCopyTable = summaryReportCopyTable;

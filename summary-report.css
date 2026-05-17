@@ -254,6 +254,18 @@
   line-height: 1.55;
 }
 
+.summary-report-pdf-preview {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 1120px;
+  max-width: none;
+  opacity: 1;
+  pointer-events: none;
+  z-index: -1;
+  background: #ffffff;
+}
+
 .summary-report-print-header {
   text-align: center;
   margin-bottom: 16px;
