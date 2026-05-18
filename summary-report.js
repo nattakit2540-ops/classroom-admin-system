@@ -332,10 +332,10 @@ async function summaryReportGenerateAttendanceDaily(classLevelsForReport, date) 
     const students = summaryReportGetStudents(classLevel);
     const records = summaryReportFlattenRecords(summaryReportFilterDailyDocs(summaryReportGetStateArray("attendance"), classLevel, date, "daily"));
     const total = students.length;
-    const present = summaryReportStatusCount(records, ["มาเรียน", "อยู่"]);
-    const absent = summaryReportStatusCount(records, ["ขาด", "ขาดเรียน"]);
-    const leave = summaryReportStatusCount(records, ["ลา"]);
-    const late = summaryReportStatusCount(records, ["มาสาย"]);
+    const present = summaryReportStatusCount(records, ["มาเรียน", "อยู่", "present"]);
+    const absent = summaryReportStatusCount(records, ["ขาด", "ขาดเรียน", "absent"]);
+    const leave = summaryReportStatusCount(records, ["ลา", "leave"]);
+    const late = summaryReportStatusCount(records, ["มาสาย", "late"]);
     const notCome = absent + leave + late;
     const pct = total > 0 ? (present / total) * 100 : 0;
     return { class: summaryReportClassName(classLevel), total, present, absent, leave, late, notCome, pct };
@@ -362,10 +362,10 @@ async function summaryReportGenerateAttendanceMonthly(classLevelsForReport, mont
     const days = new Set(docs.map((item) => item.date)).size;
     const total = students.length;
     const expected = days * total;
-    const attendTimes = summaryReportStatusCount(records, ["มาเรียน", "อยู่"]);
-    const absent = summaryReportStatusCount(records, ["ขาด", "ขาดเรียน"]);
-    const leave = summaryReportStatusCount(records, ["ลา"]);
-    const late = summaryReportStatusCount(records, ["มาสาย"]);
+    const attendTimes = summaryReportStatusCount(records, ["มาเรียน", "อยู่", "present"]);
+    const absent = summaryReportStatusCount(records, ["ขาด", "ขาดเรียน", "absent"]);
+    const leave = summaryReportStatusCount(records, ["ลา", "leave"]);
+    const late = summaryReportStatusCount(records, ["มาสาย", "late"]);
     const pctAvg = expected > 0 ? (attendTimes / expected) * 100 : 0;
     return { class: summaryReportClassName(classLevel), days, total, expected, attendTimes, absent, leave, late, pctAvg };
   });
@@ -664,57 +664,43 @@ async function summaryReportExportPDF() {
     summaryReportShowToast("กรุณาสร้างรายงานก่อนส่งออก PDF", "error");
     return;
   }
-  if (typeof html2canvas !== "function" || !window.jspdf?.jsPDF) {
+  if (!window.jspdf?.jsPDF) {
     summaryReportShowToast("ยังโหลดเครื่องมือ PDF ไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่", "error");
     return;
   }
 
-  const printArea = summaryReportRenderPDFPreview();
-  const text = (printArea?.innerText || printArea?.textContent || "").trim();
-  if (!printArea || !text) {
+  const element = summaryReportRenderPDFPreview();
+  const text = (element?.innerText || element?.textContent || "").trim();
+  if (!element || !text) {
     summaryReportShowToast("กรุณาสร้างรายงานก่อนส่งออก PDF", "error");
     return;
   }
 
   try {
     summaryReportShowToast("กำลังสร้างไฟล์ PDF...");
-    const canvas = await html2canvas(printArea, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: "#ffffff"
-    });
-    const imgData = canvas.toDataURL("image/png");
     const { jsPDF } = window.jspdf;
     const reportType = document.getElementById("summary-report-type")?.value || "";
     const isMonthly = reportType.includes("monthly");
-    const pdf = new jsPDF({
+    const doc = new jsPDF({
       orientation: isMonthly ? "landscape" : "portrait",
       unit: "mm",
       format: "a4"
     });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const imgWidth = pageWidth - 20;
-    const imgHeight = canvas.height * imgWidth / canvas.width;
-    const pageContentHeight = pageHeight - 20;
-
-    if (imgHeight <= pageContentHeight) {
-      pdf.addImage(imgData, "PNG", 10, 10, imgWidth, imgHeight);
-    } else {
-      let heightLeft = imgHeight;
-      let y = 10;
-      pdf.addImage(imgData, "PNG", 10, y, imgWidth, imgHeight);
-      heightLeft -= pageContentHeight;
-      while (heightLeft > 0) {
-        pdf.addPage();
-        y = heightLeft - imgHeight + 10;
-        pdf.addImage(imgData, "PNG", 10, y, imgWidth, imgHeight);
-        heightLeft -= pageContentHeight;
-      }
-    }
-
-    pdf.save(summaryReportGetPDFFileName());
-    summaryReportShowToast("ส่งออก PDF สำเร็จ");
+    await doc.html(element, {
+      callback: (d) => {
+        d.save(summaryReportGetPDFFileName());
+        summaryReportShowToast("ส่งออก PDF สำเร็จ");
+      },
+      margin: [15, 15, 15, 15],
+      autoPaging: "text",
+      html2canvas: {
+        scale: 0.75,
+        useCORS: true,
+        backgroundColor: "#ffffff"
+      },
+      width: isMonthly ? 267 : 180,
+      windowWidth: 1120
+    });
   } catch (error) {
     console.error("[summaryReportExportPDF]", error);
     summaryReportShowToast("ไม่สามารถส่งออก PDF ได้ กรุณาลองใหม่", "error");
